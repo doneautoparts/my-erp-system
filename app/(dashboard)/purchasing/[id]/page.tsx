@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowLeft, Trash2, CheckCircle, Plus, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Trash2, CheckCircle, Plus, AlertCircle, Printer } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 import { addItemToPurchase, removeItemFromPurchase, completePurchase } from '../actions'
 import { notFound } from 'next/navigation'
@@ -24,8 +24,7 @@ export default async function PurchaseDetailPage({
 
   if (!purchase) return notFound()
 
-  // 2. Fetch Items in this Purchase (Simplified Query for Debugging)
-  // We removed 'brands' temporarily to ensure data loads.
+  // 2. Fetch Items in this Purchase
   const { data: items, error: itemsError } = await supabase
     .from('purchase_items')
     .select(`
@@ -68,7 +67,18 @@ export default async function PurchaseDetailPage({
             </p>
           </div>
         </div>
+        
+        {/* Actions & Status */}
         <div className="flex items-center gap-2">
+            {/* PRINT BUTTON */}
+            <Link 
+              href={`/print/purchase/${purchase.id}`} 
+              target="_blank"
+              className="flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300"
+            >
+              <Printer size={14} /> Print PO
+            </Link>
+
             <span className={`px-3 py-1 rounded-full text-sm font-medium ${isCompleted ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                 {purchase.status}
             </span>
