@@ -1,10 +1,13 @@
 import Link from 'next/link'
 
-export default function ErrorPage({
+export default async function ErrorPage({
   searchParams,
 }: {
-  searchParams: { message?: string }
+  searchParams: Promise<{ message?: string }>
 }) {
+  // Wait for the message to arrive
+  const { message } = await searchParams
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-4">
       <div className="text-center max-w-lg">
@@ -12,12 +15,13 @@ export default function ErrorPage({
         <div className="mt-6 rounded-md bg-red-50 p-4 border border-red-200">
             <p className="text-sm font-bold text-red-800">System Message:</p>
             <p className="mt-1 text-lg text-red-700 font-mono break-words">
-                {searchParams.message || "Unknown error occurred"}
+                {message || "No specific error message provided."}
             </p>
         </div>
         <p className="mt-6 text-sm text-gray-500">
-           If the message says "AuthApiError: Database error saving new user", your database tables might be missing.<br/>
-           If the message mentions "URL" or "Key", your Vercel settings are wrong.
+           <b>Common Fixes:</b><br/>
+           1. Check Vercel Environment Variables (Most likely!)<br/>
+           2. Check Supabase Database Password<br/>
         </p>
         <div className="mt-8">
           <Link
