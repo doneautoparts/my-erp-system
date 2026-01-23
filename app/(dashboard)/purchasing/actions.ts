@@ -1,0 +1,32 @@
+'use server'
+
+import { createClient } from '@/utils/supabase/server'
+import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
+
+export async function createSupplier(formData: FormData) {
+  const supabase = await createClient()
+
+  const name = formData.get('name') as string
+  const contact = formData.get('contact') as string
+  const email = formData.get('email') as string
+  const phone = formData.get('phone') as string
+  const currency = formData.get('currency') as string
+
+  const { error } = await supabase
+    .from('suppliers')
+    .insert({
+      name,
+      contact_person: contact,
+      email,
+      phone,
+      currency
+    })
+
+  if (error) {
+    return redirect(`/purchasing/suppliers/new?error=${encodeURIComponent(error.message)}`)
+  }
+
+  revalidatePath('/purchasing/suppliers')
+  redirect('/purchasing/suppliers')
+}
