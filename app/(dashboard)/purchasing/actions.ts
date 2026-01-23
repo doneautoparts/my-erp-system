@@ -4,7 +4,10 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
-// --- CREATE SUPPLIER ---
+// ==============================
+// 1. SUPPLIER ACTIONS
+// ==============================
+
 export async function createSupplier(formData: FormData) {
   const supabase = await createClient()
 
@@ -32,7 +35,6 @@ export async function createSupplier(formData: FormData) {
   redirect('/purchasing/suppliers')
 }
 
-// --- UPDATE SUPPLIER ---
 export async function updateSupplier(formData: FormData) {
   const supabase = await createClient()
 
@@ -60,4 +62,53 @@ export async function updateSupplier(formData: FormData) {
 
   revalidatePath('/purchasing/suppliers')
   redirect('/purchasing/suppliers')
+}
+
+// ==============================
+// 2. PURCHASE ORDER ACTIONS
+// ==============================
+
+export async function createPurchase(formData: FormData) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Extract Data
+  const supplierId = formData.get('supplier_id') as string
+  const referenceNo = formData.get('reference_no') as string
+  const purchaseDate = formData.get('purchase_date') as string
+  const exchangeRate = parseFloat(formData.get('exchange_rate') as string) || 1.0
+
+  // 1. Get Supplier Currency Details
+  const { data: supplier } = await supabase
+    .from('suppliers')
+    .select('currency')
+    .eq('id', supplierId)
+    .single()
+
+  if (!supplier) {
+    return redirect(`/purchasing/new?error=Supplier not found`)
+  }
+
+  // 2. Create the Purchase Record
+  const { data: newPurchase, error } = await supabase
+    .from('purchases')
+    .insert({
+      supplier_id: supplierId,
+      reference_no: referenceNo,
+      purchase_date: purchaseDate,
+      currency: supplier.currency,
+      exchange_rate: exchangeRate,
+      status: 'Pending',
+      created_by: user?.id
+    })
+    .select('id')
+    .single()
+
+  if (error) {
+    return redirect(`/purchasing/new?error=${encodeURIComponent(error.message)}`)
+  }
+
+  // 3. Redirect to the "Add Items" page for this specific PO
+  revalidatePath('/purchasing')
+  redirect(`/purchasing/${newPurchase.id}`)
 }
