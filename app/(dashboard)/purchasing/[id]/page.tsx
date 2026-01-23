@@ -93,10 +93,19 @@ export default async function PurchaseDetailPage({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {items?.map((item) => (
+            {items?.map((item: any) => (
               <tr key={item.id}>
                 <td className="px-6 py-4">
-                  <div className="text-sm font-medium text-gray-900">{item.variants?.products?.brands?.name} - {item.variants?.products?.name}</div>
+                  <div className="text-sm font-medium text-gray-900">
+                    {/* Handle potential array or object structure safely */}
+                    {Array.isArray(item.variants?.products) 
+                      ? item.variants?.products[0]?.brands?.name 
+                      : item.variants?.products?.brands?.name} 
+                    {' - '} 
+                    {Array.isArray(item.variants?.products)
+                      ? item.variants?.products[0]?.name
+                      : item.variants?.products?.name}
+                  </div>
                   <div className="text-xs text-gray-500">{item.variants?.name} ({item.variants?.part_number})</div>
                 </td>
                 <td className="px-6 py-4 text-right text-sm text-gray-900">{item.quantity}</td>
@@ -138,9 +147,12 @@ export default async function PurchaseDetailPage({
                 <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
                 <select name="variant_id" required className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border">
                   <option value="">Select Product...</option>
-                  {allVariants?.map(v => (
+                  {allVariants?.map((v: any) => (
                     <option key={v.id} value={v.id}>
-                       [{v.part_number}] {v.products?.brands?.name} {v.products?.name} - {v.name}
+                       [{v.part_number}] {' '}
+                       {Array.isArray(v.products) ? v.products[0]?.brands?.name : v.products?.brands?.name} {' '}
+                       {Array.isArray(v.products) ? v.products[0]?.name : v.products?.name} 
+                       {' - '} {v.name}
                     </option>
                   ))}
                 </select>
