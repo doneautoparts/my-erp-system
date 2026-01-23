@@ -1,6 +1,7 @@
 import Link from 'next/link'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { createSale } from '../actions'
+import { SubmitButton } from './submit-button'
 
 export default function NewSalePage({
   searchParams,
@@ -73,13 +74,7 @@ export default function NewSalePage({
         </div>
 
         <div className="pt-4">
-          <button
-            type="submit"
-            className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-500"
-          >
-            <Save size={18} />
-            Create & Add Items
-          </button>
+          <SubmitButton />
         </div>
 
       </form>
