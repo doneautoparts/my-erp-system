@@ -1,12 +1,15 @@
 import Link from 'next/link'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { createItem } from '../actions'
+import { SubmitButton } from './submit-button'
 
-export default function NewItemPage({
+export default async function NewItemPage({
   searchParams,
 }: {
-  searchParams: { error?: string }
+  searchParams: Promise<{ error?: string }>
 }) {
+  const { error } = await searchParams
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
@@ -19,9 +22,9 @@ export default function NewItemPage({
         <h1 className="text-2xl font-bold text-gray-900">Add New Inventory Item</h1>
       </div>
 
-      {searchParams.error && (
+      {error && (
         <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md">
-          {searchParams.error}
+          <strong>Error:</strong> {error}
         </div>
       )}
 
@@ -33,7 +36,7 @@ export default function NewItemPage({
           
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Brand</label>
+              <label className="block text-sm font-medium text-gray-700">Brand *</label>
               <input
                 name="brand"
                 required
@@ -42,7 +45,7 @@ export default function NewItemPage({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Category</label>
+              <label className="block text-sm font-medium text-gray-700">Category *</label>
               <select
                 name="category"
                 required
@@ -59,7 +62,7 @@ export default function NewItemPage({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Product Name</label>
+            <label className="block text-sm font-medium text-gray-700">Product Name *</label>
             <input
               name="product_name"
               required
@@ -93,7 +96,7 @@ export default function NewItemPage({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Part Number / SKU</label>
+            <label className="block text-sm font-medium text-gray-700">Part Number / SKU *</label>
             <input
               name="part_number"
               required
@@ -109,7 +112,7 @@ export default function NewItemPage({
           
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Selling Price (MYR)</label>
+              <label className="block text-sm font-medium text-gray-700">Selling Price (MYR) *</label>
               <input
                 name="price"
                 type="number"
@@ -120,7 +123,7 @@ export default function NewItemPage({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Current Stock</label>
+              <label className="block text-sm font-medium text-gray-700">Current Stock *</label>
               <input
                 name="stock"
                 type="number"
@@ -130,7 +133,7 @@ export default function NewItemPage({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Low Stock Alert</label>
+              <label className="block text-sm font-medium text-gray-700">Low Stock Alert *</label>
               <input
                 name="min_stock"
                 type="number"
@@ -143,13 +146,7 @@ export default function NewItemPage({
         </div>
 
         <div className="pt-4">
-          <button
-            type="submit"
-            className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-          >
-            <Save size={18} />
-            Save Item
-          </button>
+          <SubmitButton />
         </div>
 
       </form>
