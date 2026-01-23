@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowLeft, Trash2, CheckCircle, Plus } from 'lucide-react'
+import { ArrowLeft, Trash2, CheckCircle, Plus, AlertCircle } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 import { addItemToPurchase, removeItemFromPurchase, completePurchase } from '../actions'
 import { notFound } from 'next/navigation'
@@ -24,21 +24,22 @@ export default async function PurchaseDetailPage({
 
   if (!purchase) return notFound()
 
-  // 2. Fetch Items in this Purchase
-  const { data: items } = await supabase
+  // 2. Fetch Items in this Purchase (Simplified Query for Debugging)
+  // We removed 'brands' temporarily to ensure data loads.
+  const { data: items, error: itemsError } = await supabase
     .from('purchase_items')
     .select(`
       *,
       variants (
         part_number,
         name,
-        products (name, brands(name))
+        products (name)
       )
     `)
     .eq('purchase_id', id)
     .order('created_at', { ascending: true })
 
-  // 3. Fetch All Variants (For the "Add Item" dropdown)
+  // 3. Fetch All Variants
   const { data: allVariants } = await supabase
     .from('variants')
     .select(`
@@ -74,9 +75,21 @@ export default async function PurchaseDetailPage({
         </div>
       </div>
 
+      {/* Main Error Box */}
       {error && (
         <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md">
           {error}
+        </div>
+      )}
+
+      {/* Database Fetch Error (Debug) */}
+      {itemsError && (
+        <div className="p-4 bg-orange-50 text-orange-800 border border-orange-200 rounded-md flex items-center gap-2">
+          <AlertCircle size={20} />
+          <div>
+            <p className="font-bold">System Error Loading Items:</p>
+            <p className="font-mono text-sm">{itemsError.message}</p>
+          </div>
         </div>
       )}
 
@@ -97,16 +110,12 @@ export default async function PurchaseDetailPage({
               <tr key={item.id}>
                 <td className="px-6 py-4">
                   <div className="text-sm font-medium text-gray-900">
-                    {/* Handle potential array or object structure safely */}
-                    {Array.isArray(item.variants?.products) 
-                      ? item.variants?.products[0]?.brands?.name 
-                      : item.variants?.products?.brands?.name} 
-                    {' - '} 
-                    {Array.isArray(item.variants?.products)
-                      ? item.variants?.products[0]?.name
-                      : item.variants?.products?.name}
+                    {/* Simplified Display */}
+                    {item.variants?.products?.name}
                   </div>
-                  <div className="text-xs text-gray-500">{item.variants?.name} ({item.variants?.part_number})</div>
+                  <div className="text-xs text-gray-500">
+                    {item.variants?.name} ({item.variants?.part_number})
+                  </div>
                 </td>
                 <td className="px-6 py-4 text-right text-sm text-gray-900">{item.quantity}</td>
                 <td className="px-6 py-4 text-right text-sm text-gray-900">{item.unit_cost.toFixed(2)}</td>
@@ -122,6 +131,14 @@ export default async function PurchaseDetailPage({
                 )}
               </tr>
             ))}
+            {/* Show Empty State if no items */}
+            {(!items || items.length === 0) && !itemsError && (
+               <tr>
+                 <td colSpan={5} className="px-6 py-8 text-center text-gray-400 italic">
+                   No items added yet. Use the form below.
+                 </td>
+               </tr>
+            )}
             <tr className="bg-gray-50 font-bold">
               <td colSpan={3} className="px-6 py-4 text-right">Grand Total:</td>
               <td className="px-6 py-4 text-right text-blue-800">{purchase.currency} {purchase.total_amount?.toFixed(2)}</td>
