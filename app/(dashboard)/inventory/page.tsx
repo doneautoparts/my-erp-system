@@ -5,10 +5,11 @@ import { createClient } from '@/utils/supabase/server'
 export default async function InventoryPage({
   searchParams,
 }: {
-  searchParams: { q?: string }
+  searchParams: Promise<{ q?: string }>
 }) {
   const supabase = await createClient()
-  const query = searchParams.q || ''
+  const { q } = await searchParams
+  const query = q || ''
 
   // Fetch variants joined with products and brands
   let request = supabase
@@ -25,7 +26,6 @@ export default async function InventoryPage({
 
   // Simple search filter if user typed something
   if (query) {
-    // Note: Deep search in supabase is complex, for now we search part_number or sku
     request = request.or(`sku.ilike.%${query}%,part_number.ilike.%${query}%`)
   }
 
@@ -72,6 +72,9 @@ export default async function InventoryPage({
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part No.</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Price (MYR)</th>
+              <th className="relative px-6 py-3">
+                <span className="sr-only">Edit</span>
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -103,11 +106,16 @@ export default async function InventoryPage({
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
                   {item.price_myr}
                 </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <Link href={`/inventory/${item.id}`} className="text-blue-600 hover:text-blue-900">
+                    Edit
+                  </Link>
+                </td>
               </tr>
             ))}
             {variants?.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                   No items found. Click "Add New Item" to start.
                 </td>
               </tr>
