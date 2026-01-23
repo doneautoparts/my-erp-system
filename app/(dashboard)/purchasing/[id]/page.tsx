@@ -1,0 +1,190 @@
+import Link from 'next/link'
+import { ArrowLeft, Trash2, CheckCircle, Plus } from 'lucide-react'
+import { createClient } from '@/utils/supabase/server'
+import { addItemToPurchase, removeItemFromPurchase, completePurchase } from '../actions'
+import { notFound } from 'next/navigation'
+
+export default async function PurchaseDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ error?: string }>
+}) {
+  const { id } = await params
+  const { error } = await searchParams
+  const supabase = await createClient()
+
+  // 1. Fetch Purchase Header
+  const { data: purchase } = await supabase
+    .from('purchases')
+    .select(`*, suppliers(name, currency)`)
+    .eq('id', id)
+    .single()
+
+  if (!purchase) return notFound()
+
+  // 2. Fetch Items in this Purchase
+  const { data: items } = await supabase
+    .from('purchase_items')
+    .select(`
+      *,
+      variants (
+        part_number,
+        name,
+        products (name, brands(name))
+      )
+    `)
+    .eq('purchase_id', id)
+    .order('created_at', { ascending: true })
+
+  // 3. Fetch All Variants (For the "Add Item" dropdown)
+  const { data: allVariants } = await supabase
+    .from('variants')
+    .select(`
+      id,
+      part_number,
+      name,
+      products (name, brands(name))
+    `)
+    .order('part_number')
+
+  const isCompleted = purchase.status === 'Completed'
+
+  return (
+    <div className="space-y-6 max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/purchasing" className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+            <ArrowLeft size={20} />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{purchase.reference_no}</h1>
+            <p className="text-sm text-gray-500">
+              Supplier: <span className="font-semibold">{purchase.suppliers?.name}</span> | 
+              Date: {purchase.purchase_date}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${isCompleted ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                {purchase.status}
+            </span>
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md">
+          {error}
+        </div>
+      )}
+
+      {/* Item List */}
+      <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Cost ({purchase.currency})</th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
+              {!isCompleted && <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Action</th>}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {items?.map((item) => (
+              <tr key={item.id}>
+                <td className="px-6 py-4">
+                  <div className="text-sm font-medium text-gray-900">{item.variants?.products?.brands?.name} - {item.variants?.products?.name}</div>
+                  <div className="text-xs text-gray-500">{item.variants?.name} ({item.variants?.part_number})</div>
+                </td>
+                <td className="px-6 py-4 text-right text-sm text-gray-900">{item.quantity}</td>
+                <td className="px-6 py-4 text-right text-sm text-gray-900">{item.unit_cost.toFixed(2)}</td>
+                <td className="px-6 py-4 text-right text-sm font-medium text-gray-900">{item.total_cost.toFixed(2)}</td>
+                {!isCompleted && (
+                  <td className="px-6 py-4 text-right">
+                    <form action={removeItemFromPurchase}>
+                      <input type="hidden" name="item_id" value={item.id} />
+                      <input type="hidden" name="purchase_id" value={purchase.id} />
+                      <button className="text-red-600 hover:text-red-900"><Trash2 size={16} /></button>
+                    </form>
+                  </td>
+                )}
+              </tr>
+            ))}
+            <tr className="bg-gray-50 font-bold">
+              <td colSpan={3} className="px-6 py-4 text-right">Grand Total:</td>
+              <td className="px-6 py-4 text-right text-blue-800">{purchase.currency} {purchase.total_amount?.toFixed(2)}</td>
+              {!isCompleted && <td></td>}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Actions Area */}
+      {!isCompleted ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Add Item Form */}
+          <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow border border-gray-200">
+            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
+                <Plus size={18} /> Add Item to Order
+            </h3>
+            <form action={addItemToPurchase} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+              <input type="hidden" name="purchase_id" value={purchase.id} />
+              
+              <div className="md:col-span-6">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
+                <select name="variant_id" required className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border">
+                  <option value="">Select Product...</option>
+                  {allVariants?.map(v => (
+                    <option key={v.id} value={v.id}>
+                       [{v.part_number}] {v.products?.brands?.name} {v.products?.name} - {v.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Qty</label>
+                <input name="quantity" type="number" min="1" required className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border" />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Cost ({purchase.currency})</label>
+                <input name="unit_cost" type="number" step="0.01" min="0" required className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border" />
+              </div>
+
+              <div className="md:col-span-2">
+                <button className="w-full bg-blue-600 text-white p-2 rounded-md text-sm hover:bg-blue-500">Add</button>
+              </div>
+            </form>
+          </div>
+
+          {/* Completion Box */}
+          <div className="bg-green-50 p-6 rounded-lg shadow border border-green-200 flex flex-col justify-center items-center text-center">
+            <h3 className="text-lg font-medium text-green-900 mb-2">Finalize Order</h3>
+            <p className="text-sm text-green-700 mb-4">
+              Clicking complete will <strong>automatically add {items?.length || 0} items</strong> to your Inventory stock.
+            </p>
+            <form action={completePurchase} className="w-full">
+               <input type="hidden" name="purchase_id" value={purchase.id} />
+               <button 
+                 disabled={!items || items.length === 0}
+                 className="w-full flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-3 rounded-md hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+               >
+                 <CheckCircle size={20} />
+                 Confirm & Receive Stock
+               </button>
+            </form>
+          </div>
+        </div>
+      ) : (
+        <div className="p-6 bg-gray-50 text-center rounded-lg border border-gray-200">
+            <p className="text-gray-500">This order is completed and stock has been received.</p>
+        </div>
+      )}
+    </div>
+  )
+}
