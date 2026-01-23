@@ -4,12 +4,11 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
+// --- 1. CREATE NEW ITEM ---
 export async function createItem(formData: FormData) {
   const supabase = await createClient()
 
-  console.log("1. Starting Create Item...")
-
-  // 1. Extract Data
+  // Extract Data
   const brandName = formData.get('brand') as string
   const productName = formData.get('product_name') as string
   const category = formData.get('category') as string
@@ -23,14 +22,12 @@ export async function createItem(formData: FormData) {
   const stock = parseInt(formData.get('stock') as string) || 0
   const minStock = parseInt(formData.get('min_stock') as string) || 5
 
-  // GENERATE VARIANT NAME AUTOMATICALLY
-  // If position is "Front LH" and type is "Heavy Duty", name becomes "Front LH - Heavy Duty"
-  // If both are empty, it defaults to "Standard"
+  // Generate Name
   let variantName = [position, type].filter(Boolean).join(' - ')
   if (!variantName) variantName = 'Standard'
 
   try {
-    // 2. Handle Brand
+    // Handle Brand
     const { data: existingBrand } = await supabase
       .from('brands')
       .select('id')
@@ -50,7 +47,7 @@ export async function createItem(formData: FormData) {
       brandId = newBrand.id
     }
 
-    // 3. Handle Product
+    // Handle Product
     const { data: existingProduct } = await supabase
       .from('products')
       .select('id')
@@ -75,12 +72,12 @@ export async function createItem(formData: FormData) {
       productId = newProduct.id
     }
 
-    // 4. Create Variant
+    // Create Variant
     const { error: variantError } = await supabase
       .from('variants')
       .insert({
         product_id: productId,
-        name: variantName, // <--- THIS WAS MISSING BEFORE
+        name: variantName,
         position: position || null,
         type: type || null,
         part_number: partNumber,
@@ -93,11 +90,71 @@ export async function createItem(formData: FormData) {
     if (variantError) throw new Error(`Inventory Error: ${variantError.message}`)
 
   } catch (error: any) {
-    console.error("CRITICAL ERROR:", error)
     return redirect(`/inventory/new?error=${encodeURIComponent(error.message)}`)
   }
 
-  // 5. Success
+  revalidatePath('/inventory')
+  redirect('/inventory')
+}
+
+// --- 2. UPDATE EXISTING ITEM ---
+export async function updateItem(formData: FormData) {
+  const supabase = await createClient()
+
+  // Get IDs
+  const variantId = formData.get('id') as string
+  const productId = formData.get('product_id') as string
+
+  // Extract Data
+  const productName = formData.get('product_name') as string
+  const category = formData.get('category') as string
+  
+  const position = formData.get('position') as string
+  const type = formData.get('type') as string
+  const partNumber = formData.get('part_number') as string
+  const sku = formData.get('sku') as string || partNumber
+  
+  const price = parseFloat(formData.get('price') as string) || 0
+  const stock = parseInt(formData.get('stock') as string) || 0
+  const minStock = parseInt(formData.get('min_stock') as string) || 5
+
+  // Generate new Name
+  let variantName = [position, type].filter(Boolean).join(' - ')
+  if (!variantName) variantName = 'Standard'
+
+  try {
+    // Update Product
+    const { error: productError } = await supabase
+      .from('products')
+      .update({
+        name: productName.trim(),
+        category: category
+      })
+      .eq('id', productId)
+
+    if (productError) throw new Error(`Product Update Error: ${productError.message}`)
+
+    // Update Variant
+    const { error: variantError } = await supabase
+      .from('variants')
+      .update({
+        name: variantName,
+        position: position || null,
+        type: type || null,
+        part_number: partNumber,
+        sku: sku,
+        price_myr: price,
+        stock_quantity: stock,
+        min_stock_level: minStock
+      })
+      .eq('id', variantId)
+
+    if (variantError) throw new Error(`Variant Update Error: ${variantError.message}`)
+
+  } catch (error: any) {
+    return redirect(`/inventory/${variantId}?error=${encodeURIComponent(error.message)}`)
+  }
+
   revalidatePath('/inventory')
   redirect('/inventory')
 }
