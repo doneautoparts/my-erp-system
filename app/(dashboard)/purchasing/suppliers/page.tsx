@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Plus, Building2 } from 'lucide-react'
+import { Plus, Building2, Pencil } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 
 export default async function SuppliersPage() {
@@ -38,13 +38,27 @@ export default async function SuppliersPage() {
                 <p className="truncate text-sm text-gray-500">{supplier.contact_person}</p>
               </div>
             </div>
-            <div className="flex flex-col items-end">
+            <div className="flex flex-col items-end gap-2">
                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${supplier.currency === 'USD' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
                   {supplier.currency}
                 </span>
+                {/* Edit Button (Pencil) */}
+                <Link 
+                  href={`/purchasing/suppliers/${supplier.id}`}
+                  className="z-10 text-gray-400 hover:text-blue-600"
+                  title="Edit Supplier"
+                >
+                  <Pencil size={16} />
+                </Link>
             </div>
           </div>
         ))}
+        
+        {suppliers?.length === 0 && (
+          <div className="col-span-full py-12 text-center text-gray-500">
+            No suppliers found. Add one to start purchasing.
+          </div>
+        )}
       </div>
     </div>
   )
