@@ -1,0 +1,16 @@
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    # Run every day at 8:00 AM UTC
+    - cron: "0 8 * * *"
+  workflow_dispatch: # Allows you to click a button to run it manually
+
+jobs:
+  ping_site:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Website to Wake Database
+        run: |
+          # Replace this URL with your ACTUAL Vercel website link
+          curl -I https://erpsystemmy.vercel.app/login
