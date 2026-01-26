@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Pencil } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 
 export default async function InventoryPage({
@@ -24,9 +24,9 @@ export default async function InventoryPage({
     `)
     .order('created_at', { ascending: false })
 
-  // Simple search filter if user typed something
+  // Search by Item Code, SKU, or Product Name
   if (query) {
-    request = request.or(`sku.ilike.%${query}%,part_number.ilike.%${query}%`)
+    request = request.or(`item_code.ilike.%${query}%,sku.ilike.%${query}%,part_number.ilike.%${query}%`)
   }
 
   const { data: variants, error } = await request
@@ -55,7 +55,7 @@ export default async function InventoryPage({
            <input
             name="q"
             defaultValue={query}
-            placeholder="Search SKU or Part Number..."
+            placeholder="Search Item Code (SAFST), SKU..."
             className="w-full rounded-md border-0 py-2.5 pl-10 pr-4 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-600"
           />
         </form>
@@ -66,12 +66,11 @@ export default async function InventoryPage({
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item Code</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product Info</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Specs (Pos/Type)</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part No.</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pos / Type</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Price (MYR)</th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Sell (RM)</th>
               <th className="relative px-6 py-3">
                 <span className="sr-only">Edit</span>
               </th>
@@ -81,18 +80,16 @@ export default async function InventoryPage({
             {variants?.map((item: any) => (
               <tr key={item.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap">
+                   <div className="font-bold text-blue-900">{item.item_code || '-'}</div>
+                   <div className="text-xs text-gray-500 font-mono">{item.part_number}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
                   <div className="font-medium text-gray-900">{item.products?.name}</div>
                   <div className="text-xs text-gray-500">{item.products?.brands?.name}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {item.products?.category}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   <div>{item.position || '-'}</div>
                   <div className="text-xs text-gray-400">{item.type || '-'}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">
-                  {item.part_number}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right">
                   <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
@@ -104,18 +101,18 @@ export default async function InventoryPage({
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                  {item.price_myr}
+                  {item.price_myr?.toFixed(2)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <Link href={`/inventory/${item.id}`} className="text-blue-600 hover:text-blue-900">
-                    Edit
+                  <Link href={`/inventory/${item.id}`} className="text-gray-400 hover:text-blue-600">
+                    <Pencil size={18} />
                   </Link>
                 </td>
               </tr>
             ))}
             {variants?.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                   No items found. Click "Add New Item" to start.
                 </td>
               </tr>

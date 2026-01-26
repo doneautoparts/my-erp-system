@@ -36,12 +36,9 @@ export default async function EditItemPage({
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <Link
-          href="/inventory"
-          className="p-2 rounded-full hover:bg-gray-200 transition-colors"
-        >
+        <Link href="/inventory" className="p-2 rounded-full hover:bg-gray-200 transition-colors">
           <ArrowLeft size={20} />
         </Link>
         <div className="flex-1">
@@ -56,34 +53,33 @@ export default async function EditItemPage({
         </div>
       )}
 
-      <form action={updateItem} className="bg-white p-8 rounded-lg shadow border border-gray-200 space-y-6">
+      <form action={updateItem} className="bg-white p-8 rounded-lg shadow border border-gray-200 space-y-8">
         
         {/* HIDDEN IDs */}
         <input type="hidden" name="id" value={item.id} />
         <input type="hidden" name="product_id" value={item.products?.id} />
 
-        {/* Section 1: Product Details */}
+        {/* 1. Identification */}
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">1. Product Identity</h2>
-          
+          <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">1. Identity</h2>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Brand</label>
-              <input
-                disabled
-                defaultValue={item.products?.brands?.name}
-                className="mt-1 block w-full rounded-md border border-gray-200 bg-gray-100 p-2 text-gray-500 cursor-not-allowed"
-                title="To change brand, delete and recreate item"
-              />
+              <label className="block text-sm font-medium text-gray-700">Item Code (Main ID)</label>
+              <input name="item_code" required defaultValue={item.item_code} className="form-input" />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Category *</label>
-              <select
-                name="category"
-                required
-                defaultValue={item.products?.category}
-                className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-              >
+             <div>
+              <label className="block text-sm font-medium text-gray-700">Part No / SKU</label>
+              <input name="part_number" defaultValue={item.part_number} className="form-input" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+             <div>
+              <label className="block text-sm font-medium text-gray-700">Model Name</label>
+              <input name="product_name" required defaultValue={item.products?.name} className="form-input" />
+            </div>
+             <div>
+              <label className="block text-sm font-medium text-gray-700">Category</label>
+              <select name="category" required defaultValue={item.products?.category} className="form-input bg-white">
                 <option value="Shock Absorber">Shock Absorber</option>
                 <option value="Coil Spring">Coil Spring</option>
                 <option value="Brake Pad">Brake Pad</option>
@@ -93,87 +89,77 @@ export default async function EditItemPage({
               </select>
             </div>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Product Name *</label>
-            <input
-              name="product_name"
-              required
-              defaultValue={item.products?.name}
-              className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
         </div>
 
-        {/* Section 2: Variant Details */}
+        {/* 2. Variation */}
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">2. Specifications</h2>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Position</label>
-              <input
-                name="position"
-                defaultValue={item.position || ''}
-                className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Type/Variant</label>
-              <input
-                name="type"
-                defaultValue={item.type || ''}
-                className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Part Number / SKU *</label>
-            <input
-              name="part_number"
-              required
-              defaultValue={item.part_number}
-              className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono"
-            />
-          </div>
-        </div>
-
-        {/* Section 3: Value & Stock */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">3. Inventory Status</h2>
-          
+          <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">2. Variation & Position</h2>
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Selling Price (MYR) *</label>
-              <input
-                name="price"
-                type="number"
-                step="0.01"
-                required
-                defaultValue={item.price_myr}
-                className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
+              <label className="block text-sm font-medium text-gray-700">Position</label>
+              <input name="position" defaultValue={item.position || ''} className="form-input" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Current Stock *</label>
-              <input
-                name="stock"
-                type="number"
-                required
-                defaultValue={item.stock_quantity}
-                className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
+              <label className="block text-sm font-medium text-gray-700">Var (Type)</label>
+              <input name="type" defaultValue={item.type || ''} className="form-input" />
             </div>
+             <div>
+              <label className="block text-sm font-medium text-gray-700">Packing Ratio</label>
+              <input name="packing_ratio" type="number" defaultValue={item.packing_ratio || 1} className="form-input" />
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Pricing */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">3. Pricing Structure</h2>
+          
+          <div className="grid grid-cols-2 gap-6 bg-gray-50 p-4 rounded-md">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Low Stock Alert *</label>
-              <input
-                name="min_stock"
-                type="number"
-                required
-                defaultValue={item.min_stock_level}
-                className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
+               <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Cost (Reference)</label>
+               <div className="grid grid-cols-2 gap-2">
+                 <div>
+                    <label className="text-xs">BUY (USD)</label>
+                    <input name="cost_usd" type="number" step="0.01" defaultValue={item.cost_usd} className="form-input" />
+                 </div>
+                 <div>
+                    <label className="text-xs">COST (RM)</label>
+                    <input name="cost_rm" type="number" step="0.01" defaultValue={item.cost_rm} className="form-input" />
+                 </div>
+               </div>
+            </div>
+
+            <div>
+               <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Selling Prices (RM)</label>
+               <div className="grid grid-cols-3 gap-2">
+                 <div>
+                    <label className="text-xs">SELL</label>
+                    <input name="price_sell" type="number" step="0.01" required defaultValue={item.price_myr} className="form-input" />
+                 </div>
+                 <div>
+                    <label className="text-xs">ONLINE</label>
+                    <input name="price_online" type="number" step="0.01" defaultValue={item.price_online} className="form-input" />
+                 </div>
+                 <div>
+                    <label className="text-xs">PROPOSAL</label>
+                    <input name="price_proposal" type="number" step="0.01" defaultValue={item.price_proposal} className="form-input" />
+                 </div>
+               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 4. Stock */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">4. Initial Stock</h2>
+          <div className="grid grid-cols-2 gap-4">
+             <div>
+              <label className="block text-sm font-medium text-gray-700">Current Stock (Base Units)</label>
+              <input name="stock" type="number" defaultValue={item.stock_quantity} required className="form-input" />
+            </div>
+             <div>
+              <label className="block text-sm font-medium text-gray-700">Low Stock Alert</label>
+              <input name="min_stock" type="number" defaultValue={item.min_stock_level} className="form-input" />
             </div>
           </div>
         </div>
@@ -183,6 +169,24 @@ export default async function EditItemPage({
         </div>
 
       </form>
+
+      <style>{`
+        .form-input {
+          display: block;
+          width: 100%;
+          border-radius: 0.375rem;
+          border: 1px solid #d1d5db;
+          padding: 0.5rem;
+          font-size: 0.875rem;
+          line-height: 1.25rem;
+        }
+        .form-input:focus {
+          border-color: #2563eb;
+          outline: 2px solid transparent;
+          outline-offset: 2px;
+          box-shadow: 0 0 0 2px #bfdbfe;
+        }
+      `}</style>
     </div>
   )
 }
