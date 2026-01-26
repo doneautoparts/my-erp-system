@@ -15,13 +15,23 @@ export async function createSupplier(formData: FormData) {
   const contact = formData.get('contact') as string
   const email = formData.get('email') as string
   const phone = formData.get('phone') as string
+  const address = formData.get('address') as string // <--- NEW ADDRESS FIELD
   const currency = formData.get('currency') as string
 
   const { error } = await supabase
     .from('suppliers')
-    .insert({ name, contact_person: contact, email, phone, currency })
+    .insert({
+      name,
+      contact_person: contact,
+      email,
+      phone,
+      address, // <--- SAVING ADDRESS
+      currency
+    })
 
-  if (error) return redirect(`/purchasing/suppliers/new?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/suppliers/new?error=${encodeURIComponent(error.message)}`)
+  }
 
   revalidatePath('/purchasing/suppliers')
   redirect('/purchasing/suppliers')
@@ -35,14 +45,24 @@ export async function updateSupplier(formData: FormData) {
   const contact = formData.get('contact') as string
   const email = formData.get('email') as string
   const phone = formData.get('phone') as string
+  const address = formData.get('address') as string // <--- NEW ADDRESS FIELD
   const currency = formData.get('currency') as string
 
   const { error } = await supabase
     .from('suppliers')
-    .update({ name, contact_person: contact, email, phone, currency })
+    .update({
+      name,
+      contact_person: contact,
+      email,
+      phone,
+      address, // <--- UPDATING ADDRESS
+      currency
+    })
     .eq('id', id)
 
-  if (error) return redirect(`/purchasing/suppliers/${id}?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/suppliers/${id}?error=${encodeURIComponent(error.message)}`)
+  }
 
   revalidatePath('/purchasing/suppliers')
   redirect('/purchasing/suppliers')
@@ -61,14 +81,18 @@ export async function createPurchase(formData: FormData) {
   const purchaseDate = formData.get('purchase_date') as string
   const exchangeRate = parseFloat(formData.get('exchange_rate') as string) || 1.0
 
+  // Get Supplier Details
   const { data: supplier } = await supabase
     .from('suppliers')
     .select('currency')
     .eq('id', supplierId)
     .single()
 
-  if (!supplier) return redirect(`/purchasing/new?error=Supplier not found`)
+  if (!supplier) {
+    return redirect(`/purchasing/new?error=Supplier not found`)
+  }
 
+  // Create Header
   const { data: newPurchase, error } = await supabase
     .from('purchases')
     .insert({
@@ -83,14 +107,16 @@ export async function createPurchase(formData: FormData) {
     .select('id')
     .single()
 
-  if (error) return redirect(`/purchasing/new?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/new?error=${encodeURIComponent(error.message)}`)
+  }
 
   revalidatePath('/purchasing')
   redirect(`/purchasing/${newPurchase.id}`)
 }
 
 // ==============================
-// 3. PURCHASE ITEM ACTIONS (NEW)
+// 3. PURCHASE ITEM ACTIONS
 // ==============================
 
 export async function addItemToPurchase(formData: FormData) {
@@ -117,11 +143,11 @@ export async function addItemToPurchase(formData: FormData) {
       total_cost: totalCost
     })
 
-  if (error) return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  }
 
-  // Update Total Amount on the Purchase Header
   await calculatePurchaseTotal(purchaseId, supabase)
-
   revalidatePath(`/purchasing/${purchaseId}`)
 }
 
@@ -132,10 +158,11 @@ export async function removeItemFromPurchase(formData: FormData) {
 
   const { error } = await supabase.from('purchase_items').delete().eq('id', itemId)
 
-  if (error) return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  }
 
   await calculatePurchaseTotal(purchaseId, supabase)
-
   revalidatePath(`/purchasing/${purchaseId}`)
 }
 
@@ -143,21 +170,22 @@ export async function completePurchase(formData: FormData) {
   const supabase = await createClient()
   const purchaseId = formData.get('purchase_id') as string
 
-  // Update status to 'Completed'. 
-  // The Database Trigger (handle_purchase_stock) will automatically increase inventory!
+  // Update status. Trigger will handle stock.
   const { error } = await supabase
     .from('purchases')
     .update({ status: 'Completed' })
     .eq('id', purchaseId)
 
-  if (error) return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  }
 
   revalidatePath('/purchasing')
-  revalidatePath('/inventory') // Refresh inventory so we see new stock
+  revalidatePath('/inventory')
   redirect('/purchasing')
 }
 
-// Helper: Recalculate the Grand Total of the PO
+// Helper: Recalculate Total
 async function calculatePurchaseTotal(purchaseId: string, supabase: any) {
   const { data: items } = await supabase
     .from('purchase_items')

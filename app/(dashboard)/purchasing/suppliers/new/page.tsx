@@ -64,6 +64,17 @@ export default function NewSupplierPage() {
               />
             </div>
           </div>
+
+          {/* NEW ADDRESS FIELD */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Full Address</label>
+            <textarea
+              name="address"
+              rows={3}
+              placeholder="123 Jalan Industrial, 50000 Kuala Lumpur..."
+              className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
         </div>
 
         <div className="pt-4">

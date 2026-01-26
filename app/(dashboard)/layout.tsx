@@ -5,7 +5,8 @@ import {
   ShoppingCart, 
   TrendingUp, 
   FileText, 
-  LogOut 
+  LogOut,
+  Users 
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
@@ -48,6 +49,11 @@ export default async function DashboardLayout({
           <Link href="/sales" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors">
             <TrendingUp size={20} />
             <span>Sales</span>
+          </Link>
+          {/* NEW CUSTOMERS LINK */}
+          <Link href="/customers" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors">
+            <Users size={20} />
+            <span>Customers</span>
           </Link>
           <Link href="/reports" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors">
             <FileText size={20} />

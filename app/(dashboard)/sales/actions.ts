@@ -9,8 +9,9 @@ export async function createSale(formData: FormData) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  const customerId = formData.get('customer_id') as string // NEW
   const customerName = formData.get('customer_name') as string
-  const channel = formData.get('channel') as string // Shopee, Lazada, Walk-in
+  const channel = formData.get('channel') as string
   const referenceNo = formData.get('reference_no') as string
   const saleDate = formData.get('sale_date') as string
 
@@ -18,11 +19,12 @@ export async function createSale(formData: FormData) {
   const { data: newSale, error } = await supabase
     .from('sales')
     .insert({
+      customer_id: customerId || null, // NEW (Links to Customer Table)
       customer_name: customerName,
       channel: channel,
       reference_no: referenceNo,
       sale_date: saleDate,
-      status: 'Pending', // Pending payment/completion
+      status: 'Pending',
       created_by: user?.id
     })
     .select('id')
@@ -36,7 +38,7 @@ export async function createSale(formData: FormData) {
   redirect(`/sales/${newSale.id}`)
 }
 
-// 2. ADD ITEM TO SALE (DEDUCTS STOCK IMMEDIATELY via DB Trigger)
+// 2. ADD ITEM TO SALE
 export async function addItemToSale(formData: FormData) {
   const supabase = await createClient()
 
@@ -45,7 +47,7 @@ export async function addItemToSale(formData: FormData) {
   const quantity = parseInt(formData.get('quantity') as string)
   const unitPrice = parseFloat(formData.get('unit_price') as string)
 
-  // Check if stock is sufficient
+  // Check stock
   const { data: variant } = await supabase
     .from('variants')
     .select('stock_quantity, name')
@@ -74,7 +76,7 @@ export async function addItemToSale(formData: FormData) {
   revalidatePath(`/sales/${saleId}`)
 }
 
-// 3. REMOVE ITEM (RETURNS STOCK via DB Trigger)
+// 3. REMOVE ITEM
 export async function removeItemFromSale(formData: FormData) {
   const supabase = await createClient()
   const itemId = formData.get('item_id') as string
