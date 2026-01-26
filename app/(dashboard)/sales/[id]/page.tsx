@@ -1,8 +1,9 @@
 import Link from 'next/link'
-import { ArrowLeft, Trash2, CheckCircle, Plus, AlertCircle, Printer } from 'lucide-react'
+import { ArrowLeft, Trash2, CheckCircle, AlertCircle, Printer } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
-import { addItemToSale, removeItemFromSale, completeSale } from '../actions'
+import { removeItemFromSale, completeSale } from '../actions'
 import { notFound } from 'next/navigation'
+import AddItemForm from './add-item-form' // Import the new component
 
 export default async function SaleDetailPage({
   params,
@@ -39,19 +40,22 @@ export default async function SaleDetailPage({
     .eq('sale_id', id)
     .order('created_at', { ascending: true })
 
-  // 3. Fetch Available Variants
+  // 3. Fetch Available Variants (WITH ALL PRICES)
   const { data: allVariants } = await supabase
     .from('variants')
     .select(`
       id,
+      item_code,
       part_number,
       name,
       stock_quantity,
-      price_myr,
+      price_myr,       
+      price_online,    
+      price_proposal,  
       products (name, brands(name))
     `)
-    .gt('stock_quantity', 0) // Only show items with stock!
-    .order('part_number')
+    .gt('stock_quantity', 0) // Only show items with stock
+    .order('item_code', { ascending: true }) // Sort by Item Code (SAFST etc)
 
   const isCompleted = sale.status === 'Completed'
 
@@ -114,7 +118,6 @@ export default async function SaleDetailPage({
               <tr key={item.id}>
                 <td className="px-6 py-4">
                    <div className="text-sm font-medium text-gray-900">
-                    {/* Safe Access */}
                     {Array.isArray(item.variants?.products) 
                       ? item.variants?.products[0]?.name
                       : item.variants?.products?.name}
@@ -150,51 +153,10 @@ export default async function SaleDetailPage({
       {!isCompleted ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* Add Item Form */}
-          <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow border border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
-                <Plus size={18} /> Sell Item
-            </h3>
-            <form action={addItemToSale} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-              <input type="hidden" name="sale_id" value={sale.id} />
-              
-              <div className="md:col-span-6">
-                <label className="block text-xs font-medium text-gray-500 mb-1">Select Product (Only In-Stock)</label>
-                <select name="variant_id" required className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border">
-                  <option value="">Select Product...</option>
-                  {allVariants?.map((v: any) => (
-                    <option key={v.id} value={v.id}>
-                       [{v.part_number}] {' '}
-                       {Array.isArray(v.products) ? v.products[0]?.brands?.name : v.products?.brands?.name} {' '}
-                       {Array.isArray(v.products) ? v.products[0]?.name : v.products?.name} 
-                       {' '} ({v.stock_quantity} left)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-xs font-medium text-gray-500 mb-1">Qty</label>
-                <input name="quantity" type="number" min="1" defaultValue="1" required className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border" />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-xs font-medium text-gray-500 mb-1">Price (MYR)</label>
-                <input 
-                  name="unit_price" 
-                  type="number" 
-                  step="0.01" 
-                  min="0" 
-                  required 
-                  className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border" 
-                  placeholder="Price"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <button className="w-full bg-blue-600 text-white p-2 rounded-md text-sm hover:bg-blue-500">Add</button>
-              </div>
-            </form>
+          {/* NEW SMART ADD ITEM FORM */}
+          <div className="lg:col-span-2">
+             <h3 className="text-lg font-medium text-gray-900 mb-4">Sell Item</h3>
+             <AddItemForm saleId={sale.id} variants={allVariants || []} />
           </div>
 
           {/* Completion Box */}
