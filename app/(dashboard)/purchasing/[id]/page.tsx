@@ -1,9 +1,9 @@
 import Link from 'next/link'
-import { ArrowLeft, Trash2, CheckCircle, AlertCircle, Printer } from 'lucide-react'
+import { ArrowLeft, Trash2, CheckCircle, AlertCircle, Printer, Plus } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 import { removeItemFromPurchase, completePurchase } from '../actions'
 import { notFound } from 'next/navigation'
-import AddPurchaseItemForm from './add-item-form' // Import the new component
+import AddPurchaseItemForm from './add-item-form'
 
 export default async function PurchaseDetailPage({
   params,
@@ -175,7 +175,7 @@ export default async function PurchaseDetailPage({
                  className="w-full flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-3 rounded-md hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
                >
                  <CheckCircle size={20} />
-                 Confirm & Receive Stocks
+                 Confirm & Receive Stock
                </button>
             </form>
           </div>
