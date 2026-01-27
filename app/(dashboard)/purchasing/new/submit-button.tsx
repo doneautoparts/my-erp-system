@@ -15,7 +15,7 @@ export function SubmitButton() {
       }`}
     >
       {pending ? (
-        <span>Processing...</span>
+        <span>Processing....</span>
       ) : (
         <>
           <Save size={18} />
