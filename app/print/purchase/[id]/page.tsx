@@ -25,11 +25,10 @@ export default async function PrintPurchaseOrder({
 
   // --- COMPANY INFO (HARDCODED FOR NOW) ---
   const myCompany = {
-    name: "DONE AUTO PARTS",
-    address: "No. 123, Jalan Automotive 1, Industrial Park",
-    city: "50000 Kuala Lumpur",
-    phone: "+60 3-1234 5678",
-    email: "admin@doneautoparts.com"
+    name: "D ONE AUTOPART ENTERPRISE (201203206722)",
+    address: "No 810G, Kompleks Diamond, Bangi Business Centre,",
+    city: "43650 Bandar Baru Bangi, Selangor",
+    phone: "+6017-691 8679     Email: doneautoparts@gmail.com"
   }
 
   return (
