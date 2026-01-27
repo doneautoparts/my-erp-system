@@ -175,7 +175,7 @@ export default async function PurchaseDetailPage({
                  className="w-full flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-3 rounded-md hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
                >
                  <CheckCircle size={20} />
-                 Confirm & Receive Stock
+                 Confirm & Receive Stocks
                </button>
             </form>
           </div>
