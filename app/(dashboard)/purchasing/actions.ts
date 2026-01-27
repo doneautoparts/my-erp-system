@@ -165,7 +165,7 @@ export async function completePurchase(formData: FormData) {
   redirect('/purchasing')
 }
 
-// Helper: Recalculate Total
+// Helper: Recalculate Totals
 async function calculatePurchaseTotal(purchaseId: string, supabase: any) {
   const { data: items } = await supabase
     .from('purchase_items')
