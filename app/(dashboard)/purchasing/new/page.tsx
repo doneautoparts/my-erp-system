@@ -12,7 +12,7 @@ export default async function NewPurchasePage({
   const { error } = await searchParams
   const supabase = await createClient()
 
-  // Fetch suppliers
+  // Fetch supplierss
   const { data: suppliers } = await supabase
     .from('suppliers')
     .select('id, name, currency')
