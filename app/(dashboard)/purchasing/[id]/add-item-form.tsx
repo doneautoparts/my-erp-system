@@ -78,7 +78,7 @@ export default function AddPurchaseItemForm({
           required 
           className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border bg-gray-50 font-bold text-blue-800" 
           defaultValue={activeCost} 
-          key={activeCost} // Force update input when cost changes
+          key={activeCost} // Force update input when cost changess
         />
       </div>
 
