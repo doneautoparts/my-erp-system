@@ -1,7 +1,8 @@
 import Link from 'next/link'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 import { createPurchase } from '../actions'
+import { SubmitButton } from './submit-button'
 
 export default async function NewPurchasePage({
   searchParams,
@@ -11,22 +12,18 @@ export default async function NewPurchasePage({
   const { error } = await searchParams
   const supabase = await createClient()
 
-  // Fetch suppliers to show in the dropdown
+  // Fetch suppliers
   const { data: suppliers } = await supabase
     .from('suppliers')
     .select('id, name, currency')
     .order('name')
 
-  // Default date to today
   const today = new Date().toISOString().split('T')[0]
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <Link
-          href="/purchasing"
-          className="p-2 rounded-full hover:bg-gray-200 transition-colors"
-        >
+        <Link href="/purchasing" className="p-2 rounded-full hover:bg-gray-200 transition-colors">
           <ArrowLeft size={20} />
         </Link>
         <h1 className="text-2xl font-bold text-gray-900">Create Purchase Order</h1>
@@ -95,13 +92,7 @@ export default async function NewPurchasePage({
         </div>
 
         <div className="pt-4">
-          <button
-            type="submit"
-            className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-500"
-          >
-            <Save size={18} />
-            Create & Add Items
-          </button>
+          <SubmitButton />
         </div>
 
       </form>

@@ -1,8 +1,9 @@
 import Link from 'next/link'
-import { ArrowLeft, Trash2, CheckCircle, Plus, AlertCircle, Printer } from 'lucide-react'
+import { ArrowLeft, Trash2, CheckCircle, AlertCircle, Printer } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
-import { addItemToPurchase, removeItemFromPurchase, completePurchase } from '../actions'
+import { removeItemFromPurchase, completePurchase } from '../actions'
 import { notFound } from 'next/navigation'
+import AddPurchaseItemForm from './add-item-form' // Import the new component
 
 export default async function PurchaseDetailPage({
   params,
@@ -25,29 +26,33 @@ export default async function PurchaseDetailPage({
   if (!purchase) return notFound()
 
   // 2. Fetch Items in this Purchase
-  const { data: items, error: itemsError } = await supabase
+  const { data: items } = await supabase
     .from('purchase_items')
     .select(`
       *,
       variants (
         part_number,
         name,
+        item_code,
         products (name)
       )
     `)
     .eq('purchase_id', id)
     .order('created_at', { ascending: true })
 
-  // 3. Fetch All Variants
+  // 3. Fetch All Variants (For Dropdown)
   const { data: allVariants } = await supabase
     .from('variants')
     .select(`
       id,
+      item_code,
       part_number,
       name,
+      cost_usd,
+      cost_rm,
       products (name, brands(name))
     `)
-    .order('part_number')
+    .order('item_code')
 
   const isCompleted = purchase.status === 'Completed'
 
@@ -68,9 +73,8 @@ export default async function PurchaseDetailPage({
           </div>
         </div>
         
-        {/* Actions & Status */}
+        {/* Actions */}
         <div className="flex items-center gap-2">
-            {/* PRINT BUTTON */}
             <Link 
               href={`/print/purchase/${purchase.id}`} 
               target="_blank"
@@ -85,21 +89,11 @@ export default async function PurchaseDetailPage({
         </div>
       </div>
 
-      {/* Main Error Box */}
+      {/* Error Display */}
       {error && (
-        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md">
-          {error}
-        </div>
-      )}
-
-      {/* Database Fetch Error (Debug) */}
-      {itemsError && (
-        <div className="p-4 bg-orange-50 text-orange-800 border border-orange-200 rounded-md flex items-center gap-2">
+        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md flex items-center gap-2">
           <AlertCircle size={20} />
-          <div>
-            <p className="font-bold">System Error Loading Items:</p>
-            <p className="font-mono text-sm">{itemsError.message}</p>
-          </div>
+          {error}
         </div>
       )}
 
@@ -120,11 +114,13 @@ export default async function PurchaseDetailPage({
               <tr key={item.id}>
                 <td className="px-6 py-4">
                   <div className="text-sm font-medium text-gray-900">
-                    {/* Simplified Display */}
-                    {item.variants?.products?.name}
+                    {/* Safe Name Display */}
+                    {Array.isArray(item.variants?.products) 
+                      ? item.variants?.products[0]?.name 
+                      : item.variants?.products?.name}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {item.variants?.name} ({item.variants?.part_number})
+                    {item.variants?.name} ({item.variants?.item_code})
                   </div>
                 </td>
                 <td className="px-6 py-4 text-right text-sm text-gray-900">{item.quantity}</td>
@@ -141,14 +137,6 @@ export default async function PurchaseDetailPage({
                 )}
               </tr>
             ))}
-            {/* Show Empty State if no items */}
-            {(!items || items.length === 0) && !itemsError && (
-               <tr>
-                 <td colSpan={5} className="px-6 py-8 text-center text-gray-400 italic">
-                   No items added yet. Use the form below.
-                 </td>
-               </tr>
-            )}
             <tr className="bg-gray-50 font-bold">
               <td colSpan={3} className="px-6 py-4 text-right">Grand Total:</td>
               <td className="px-6 py-4 text-right text-blue-800">{purchase.currency} {purchase.total_amount?.toFixed(2)}</td>
@@ -162,43 +150,16 @@ export default async function PurchaseDetailPage({
       {!isCompleted ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* Add Item Form */}
+          {/* SMART ADD ITEM FORM */}
           <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow border border-gray-200">
             <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
                 <Plus size={18} /> Add Item to Order
             </h3>
-            <form action={addItemToPurchase} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-              <input type="hidden" name="purchase_id" value={purchase.id} />
-              
-              <div className="md:col-span-6">
-                <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
-                <select name="variant_id" required className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border">
-                  <option value="">Select Product...</option>
-                  {allVariants?.map((v: any) => (
-                    <option key={v.id} value={v.id}>
-                       [{v.part_number}] {' '}
-                       {Array.isArray(v.products) ? v.products[0]?.brands?.name : v.products?.brands?.name} {' '}
-                       {Array.isArray(v.products) ? v.products[0]?.name : v.products?.name} 
-                       {' - '} {v.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-xs font-medium text-gray-500 mb-1">Qty</label>
-                <input name="quantity" type="number" min="1" required className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border" />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-xs font-medium text-gray-500 mb-1">Cost ({purchase.currency})</label>
-                <input name="unit_cost" type="number" step="0.01" min="0" required className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border" />
-              </div>
-
-              <div className="md:col-span-2">
-                <button className="w-full bg-blue-600 text-white p-2 rounded-md text-sm hover:bg-blue-500">Add</button>
-              </div>
-            </form>
+            <AddPurchaseItemForm 
+              purchaseId={purchase.id} 
+              currency={purchase.currency} 
+              variants={allVariants || []} 
+            />
           </div>
 
           {/* Completion Box */}
