@@ -5,6 +5,7 @@ import { removeItemFromPurchase, completePurchase } from '../actions'
 import { notFound, redirect } from 'next/navigation'
 import AddPurchaseItemForm from './add-item-form'
 import { createGRNFromPO } from '../../inventory/grn/actions'
+import DeleteItemButton from './delete-item-button' // Import the new button
 
 export default async function PurchaseDetailPage({
   params,
@@ -44,7 +45,15 @@ export default async function PurchaseDetailPage({
   // 3. Fetch All Variants
   const { data: allVariants } = await supabase
     .from('variants')
-    .select(`id, item_code, part_number, name, cost_usd, cost_rm, products (name, brands(name))`)
+    .select(`
+      id, 
+      item_code, 
+      part_number, 
+      name, 
+      cost_usd, 
+      cost_rm, 
+      products (name, brands(name))
+    `)
     .order('item_code')
 
   const isPending = purchase.status === 'Pending'
@@ -106,9 +115,14 @@ export default async function PurchaseDetailPage({
               <tr key={item.id}>
                 <td className="px-6 py-4">
                   <div className="text-sm font-medium text-gray-900">
-                    {Array.isArray(item.variants?.products) ? item.variants?.products[0]?.name : item.variants?.products?.name}
+                    {/* Safe Name Display */}
+                    {Array.isArray(item.variants?.products) 
+                      ? item.variants?.products[0]?.name 
+                      : item.variants?.products?.name}
                   </div>
-                  <div className="text-xs text-gray-500">{item.variants?.name}</div>
+                  <div className="text-xs text-gray-500">
+                    {item.variants?.name} ({item.variants?.item_code})
+                  </div>
                 </td>
                 <td className="px-6 py-4 text-right text-sm text-gray-900">{item.quantity}</td>
                 <td className="px-6 py-4 text-right text-sm text-gray-900">{item.unit_cost.toFixed(2)}</td>
@@ -118,7 +132,8 @@ export default async function PurchaseDetailPage({
                     <form action={removeItemFromPurchase}>
                       <input type="hidden" name="item_id" value={item.id} />
                       <input type="hidden" name="purchase_id" value={purchase.id} />
-                      <button className="text-red-600 hover:text-red-900"><Trash2 size={16} /></button>
+                      {/* NEW DYNAMIC BUTTON */}
+                      <DeleteItemButton />
                     </form>
                   </td>
                 )}
