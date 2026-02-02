@@ -5,7 +5,7 @@ import { Plus } from 'lucide-react'
 import { addItemToPurchase } from '../actions'
 import { useFormStatus } from 'react-dom'
 
-// Helper Button for "Adding..." state
+// Helper Button
 function SubmitButton() {
   const { pending } = useFormStatus()
   return (
@@ -30,13 +30,49 @@ export default function AddPurchaseItemForm({
   currency: string, 
   variants: any[] 
 }) {
+  const [selectedBrand, setSelectedBrand] = useState("")
+  const [selectedProduct, setSelectedProduct] = useState("")
   const [selectedVariantId, setSelectedVariantId] = useState("")
 
-  // Auto-Select Cost Logic
+  // 1. Extract Unique Brands (Sorted A-Z)
+  const brands = useMemo(() => {
+    const uniqueBrands = new Set(variants.map(v => 
+      Array.isArray(v.products) ? v.products[0]?.brands?.name : v.products?.brands?.name
+    ).filter(Boolean))
+    return Array.from(uniqueBrands).sort()
+  }, [variants])
+
+  // 2. Filter Products based on Selected Brand (Sorted A-Z)
+  const products = useMemo(() => {
+    if (!selectedBrand) return []
+    const filtered = variants.filter(v => {
+      const brandName = Array.isArray(v.products) ? v.products[0]?.brands?.name : v.products?.brands?.name
+      return brandName === selectedBrand
+    })
+    
+    const uniqueProducts = new Set(filtered.map(v => 
+      Array.isArray(v.products) ? v.products[0]?.name : v.products?.name
+    ).filter(Boolean))
+    
+    return Array.from(uniqueProducts).sort()
+  }, [variants, selectedBrand])
+
+  // 3. Filter Items based on Selected Product (Sorted by Item Code)
+  const filteredVariants = useMemo(() => {
+    if (!selectedProduct) return []
+    return variants
+      .filter(v => {
+        const brandName = Array.isArray(v.products) ? v.products[0]?.brands?.name : v.products?.brands?.name
+        const productName = Array.isArray(v.products) ? v.products[0]?.name : v.products?.name
+        return brandName === selectedBrand && productName === selectedProduct
+      })
+      .sort((a, b) => (a.item_code || '').localeCompare(b.item_code || ''))
+  }, [variants, selectedBrand, selectedProduct])
+
+  // 4. Auto-Select Cost Logic
   const activeCost = useMemo(() => {
     const item = variants.find(v => v.id === selectedVariantId)
     if (!item) return 0
-    
     // If Purchase Currency is USD, use Cost USD. Otherwise Cost RM.
     return currency === 'USD' ? (item.cost_usd || 0) : (item.cost_rm || 0)
   }, [selectedVariantId, variants, currency])
@@ -45,19 +81,59 @@ export default function AddPurchaseItemForm({
     <form action={addItemToPurchase} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
       <input type="hidden" name="purchase_id" value={purchaseId} />
       
+      {/* FILTER 1: BRAND */}
+      <div className="md:col-span-3">
+        <label className="block text-xs font-medium text-gray-500 mb-1">1. Filter Brand</label>
+        <select 
+          className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border"
+          value={selectedBrand}
+          onChange={(e) => {
+            setSelectedBrand(e.target.value)
+            setSelectedProduct("") // Reset lower filters
+            setSelectedVariantId("")
+          }}
+        >
+          <option value="">-- All Brands --</option>
+          {brands.map((b: any) => (
+            <option key={b} value={b}>{b}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* FILTER 2: MODEL/PRODUCT */}
+      <div className="md:col-span-3">
+        <label className="block text-xs font-medium text-gray-500 mb-1">2. Filter Model</label>
+        <select 
+          className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border"
+          value={selectedProduct}
+          onChange={(e) => {
+            setSelectedProduct(e.target.value)
+            setSelectedVariantId("") // Reset Item
+          }}
+          disabled={!selectedBrand}
+        >
+          <option value="">-- Select Model --</option>
+          {products.map((p: any) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* FILTER 3: SPECIFIC ITEM */}
       <div className="md:col-span-6">
-        <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
+        <label className="block text-xs font-medium text-gray-500 mb-1">3. Select Item</label>
         <select 
           name="variant_id" 
           required 
-          className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border"
-          onChange={(e) => setSelectedVariantId(e.target.value)}
+          className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border bg-blue-50"
           value={selectedVariantId}
+          onChange={(e) => setSelectedVariantId(e.target.value)}
+          disabled={!selectedProduct}
         >
-          <option value="">Select Product...</option>
-          {variants?.map((v: any) => (
+          <option value="">-- Choose Item --</option>
+          {filteredVariants.map((v: any) => (
             <option key={v.id} value={v.id}>
-               [{v.item_code}] {Array.isArray(v.products) ? v.products[0]?.name : v.products?.name} - {v.name}
+               [{v.item_code}] {v.name}
             </option>
           ))}
         </select>
@@ -78,7 +154,7 @@ export default function AddPurchaseItemForm({
           required 
           className="w-full rounded-md border-gray-300 shadow-sm text-sm p-2 border bg-gray-50 font-bold text-blue-800" 
           defaultValue={activeCost} 
-          key={activeCost} // Force update input when cost changess
+          key={activeCost} 
         />
       </div>
 
