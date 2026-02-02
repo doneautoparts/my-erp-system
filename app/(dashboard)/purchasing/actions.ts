@@ -179,3 +179,25 @@ async function calculatePurchaseTotal(purchaseId: string, supabase: any) {
     .update({ total_amount: total })
     .eq('id', purchaseId)
 }
+// ... keep previous imports and functions ...
+
+export async function completePurchase(formData: FormData) {
+  const supabase = await createClient()
+  const purchaseId = formData.get('purchase_id') as string
+
+  // CHANGED: Status becomes 'Ordered' instead of 'Completed'. 
+  // Stock is NOT added here anymore.
+  const { error } = await supabase
+    .from('purchases')
+    .update({ status: 'Ordered' })
+    .eq('id', purchaseId)
+
+  if (error) {
+    return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  }
+
+  revalidatePath('/purchasing')
+  redirect('/purchasing')
+}
+
+// ... keep helper function ...
