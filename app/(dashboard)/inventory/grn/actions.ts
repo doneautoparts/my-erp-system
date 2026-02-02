@@ -17,14 +17,17 @@ export async function createGRNFromPO(purchaseId: string) {
 
   if (!po) throw new Error("PO not found")
 
-  // 2. Generate GRN Number
-  const grnNo = `GRN-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000)}`
+  // 2. Generate Auto-Number (Database Function for GRN)
+  const { data: grnNo, error: refError } = await supabase
+    .rpc('generate_doc_number', { prefix: 'GRN' })
+
+  if (refError) throw new Error(refError.message)
 
   // 3. Create GRN Header
   const { data: newGrn, error: grnError } = await supabase
     .from('grn')
     .insert({
-      grn_no: grnNo,
+      grn_no: grnNo as string, // Auto Generated
       purchase_id: purchaseId,
       status: 'Draft',
       created_by: user?.id

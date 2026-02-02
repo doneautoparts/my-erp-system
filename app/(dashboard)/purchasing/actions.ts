@@ -16,7 +16,7 @@ export async function createSupplier(formData: FormData) {
   const email = formData.get('email') as string
   const phone = formData.get('phone') as string
   const address = formData.get('address') as string
-  const tin_number = formData.get('tin_number') as string // <--- NEW
+  const tin_number = formData.get('tin_number') as string
   const currency = formData.get('currency') as string
 
   const { error } = await supabase
@@ -27,11 +27,13 @@ export async function createSupplier(formData: FormData) {
       email,
       phone,
       address,
-      tin_number, // <--- SAVE
+      tin_number,
       currency
     })
 
-  if (error) return redirect(`/purchasing/suppliers/new?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/suppliers/new?error=${encodeURIComponent(error.message)}`)
+  }
 
   revalidatePath('/purchasing/suppliers')
   redirect('/purchasing/suppliers')
@@ -46,7 +48,7 @@ export async function updateSupplier(formData: FormData) {
   const email = formData.get('email') as string
   const phone = formData.get('phone') as string
   const address = formData.get('address') as string
-  const tin_number = formData.get('tin_number') as string // <--- NEW
+  const tin_number = formData.get('tin_number') as string
   const currency = formData.get('currency') as string
 
   const { error } = await supabase
@@ -57,12 +59,14 @@ export async function updateSupplier(formData: FormData) {
       email,
       phone,
       address,
-      tin_number, // <--- UPDATE
+      tin_number,
       currency
     })
     .eq('id', id)
 
-  if (error) return redirect(`/purchasing/suppliers/${id}?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/suppliers/${id}?error=${encodeURIComponent(error.message)}`)
+  }
 
   revalidatePath('/purchasing/suppliers')
   redirect('/purchasing/suppliers')
@@ -78,34 +82,37 @@ export async function createPurchase(formData: FormData) {
 
   const companyId = formData.get('company_id') as string
   const supplierId = formData.get('supplier_id') as string
-  const referenceNo = formData.get('reference_no') as string
+  // Note: Reference No is now AUTO GENERATED via Database RPC
   const purchaseDate = formData.get('purchase_date') as string
   const exchangeRate = parseFloat(formData.get('exchange_rate') as string) || 1.0
 
-  const { data: existingRef } = await supabase
-    .from('purchases')
-    .select('id')
-    .eq('reference_no', referenceNo)
-    .single()
+  // 1. Generate Auto-Number (Database Function)
+  const { data: refData, error: refError } = await supabase
+    .rpc('generate_doc_number', { prefix: 'POT' })
 
-  if (existingRef) {
-    return redirect(`/purchasing/new?error=Reference No "${referenceNo}" already exists.`)
+  if (refError) {
+    return redirect(`/purchasing/new?error=Number Gen Error: ${encodeURIComponent(refError.message)}`)
   }
+  const referenceNo = refData as string
 
+  // 2. Get Supplier Details
   const { data: supplier } = await supabase
     .from('suppliers')
     .select('currency')
     .eq('id', supplierId)
     .single()
 
-  if (!supplier) return redirect(`/purchasing/new?error=Supplier not found`)
+  if (!supplier) {
+    return redirect(`/purchasing/new?error=Supplier not found`)
+  }
 
+  // 3. Create Header
   const { data: newPurchase, error } = await supabase
     .from('purchases')
     .insert({
       company_id: companyId,
       supplier_id: supplierId,
-      reference_no: referenceNo,
+      reference_no: referenceNo, // Auto Generated
       purchase_date: purchaseDate,
       currency: supplier.currency,
       exchange_rate: exchangeRate,
@@ -115,7 +122,9 @@ export async function createPurchase(formData: FormData) {
     .select('id')
     .single()
 
-  if (error) return redirect(`/purchasing/new?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/new?error=${encodeURIComponent(error.message)}`)
+  }
 
   revalidatePath('/purchasing')
   redirect(`/purchasing/${newPurchase.id}`)
@@ -133,7 +142,9 @@ export async function addItemToPurchase(formData: FormData) {
   const quantity = parseInt(formData.get('quantity') as string)
   const unitCost = parseFloat(formData.get('unit_cost') as string)
 
-  if (!variantId) return redirect(`/purchasing/${purchaseId}?error=Please select a product`)
+  if (!variantId) {
+    return redirect(`/purchasing/${purchaseId}?error=Please select a product`)
+  }
 
   const totalCost = quantity * unitCost
 
@@ -147,7 +158,9 @@ export async function addItemToPurchase(formData: FormData) {
       total_cost: totalCost
     })
 
-  if (error) return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  }
 
   await calculatePurchaseTotal(purchaseId, supabase)
   revalidatePath(`/purchasing/${purchaseId}`)
@@ -160,7 +173,9 @@ export async function removeItemFromPurchase(formData: FormData) {
 
   const { error } = await supabase.from('purchase_items').delete().eq('id', itemId)
 
-  if (error) return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  }
 
   await calculatePurchaseTotal(purchaseId, supabase)
   revalidatePath(`/purchasing/${purchaseId}`)
@@ -170,12 +185,15 @@ export async function completePurchase(formData: FormData) {
   const supabase = await createClient()
   const purchaseId = formData.get('purchase_id') as string
 
+  // Status becomes 'Ordered'. Stock is NOT added here (Wait for GRN).
   const { error } = await supabase
     .from('purchases')
     .update({ status: 'Ordered' })
     .eq('id', purchaseId)
 
-  if (error) return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  }
 
   revalidatePath('/purchasing')
   redirect('/purchasing')
