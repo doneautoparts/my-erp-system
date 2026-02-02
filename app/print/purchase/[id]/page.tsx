@@ -10,6 +10,7 @@ export default async function PrintPurchaseOrder({
   const { id } = await params
   const supabase = await createClient()
 
+  // Fetch Purchase + Supplier Details
   const { data: purchase } = await supabase
     .from('purchases')
     .select(`*, suppliers(*)`)
@@ -18,17 +19,20 @@ export default async function PrintPurchaseOrder({
 
   if (!purchase) return notFound()
 
+  // Fetch Items
   const { data: items } = await supabase
     .from('purchase_items')
     .select(`*, variants(products(name, brands(name)), name, part_number)`)
     .eq('purchase_id', id)
 
   // --- COMPANY INFO (HARDCODED FOR NOW) ---
+  // You can change this to your actual company details
   const myCompany = {
-    name: "D ONE AUTOPART ENTERPRISE (201203206722)",
-    address: "No 810G, Kompleks Diamond, Bangi Business Centre,",
-    city: "43650 Bandar Baru Bangi, Selangor",
-    phone: "+6017-691 8679     Email: doneautoparts@gmail.com"
+    name: "DONE AUTO PARTS",
+    address: "No. 123, Jalan Automotive 1, Industrial Park",
+    city: "50000 Kuala Lumpur",
+    phone: "+60 3-1234 5678",
+    email: "admin@doneautoparts.com"
   }
 
   return (
@@ -56,11 +60,19 @@ export default async function PrintPurchaseOrder({
       {/* Supplier Info */}
       <div className="mb-8">
         <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Vendor / Supplier</h3>
-        <div className="text-sm">
-          <p className="font-bold text-lg">{purchase.suppliers?.name}</p>
-          <p>Contact: {purchase.suppliers?.contact_person}</p>
-          <p>{purchase.suppliers?.email}</p>
-          <p>{purchase.suppliers?.phone}</p>
+        <div className="text-sm text-gray-700">
+          <p className="font-bold text-lg text-gray-900">{purchase.suppliers?.name}</p>
+          
+          {/* ADDRESS SECTION */}
+          {purchase.suppliers?.address && (
+            <p className="whitespace-pre-line mb-2 text-gray-600">{purchase.suppliers.address}</p>
+          )}
+          
+          <div className="mt-2">
+            <p><span className="font-semibold">Attn:</span> {purchase.suppliers?.contact_person}</p>
+            <p>{purchase.suppliers?.email}</p>
+            <p>{purchase.suppliers?.phone}</p>
+          </div>
         </div>
       </div>
 
@@ -106,7 +118,7 @@ export default async function PrintPurchaseOrder({
       {/* Footer */}
       <div className="mt-16 pt-8 border-t border-gray-200 text-xs text-center text-gray-400">
         <p>This is a computer-generated document. No signature is required.</p>
-        <p>{myCompany.name} - Internal ERP System</p>
+        <p>{myCompany.name} - ERP System Mgmt</p>
       </div>
     </div>
   )
