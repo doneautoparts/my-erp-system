@@ -1,127 +1,115 @@
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
-import { notFound } from 'next/navigation'
-import PrintAction from '../../print-button'
+import { createPurchase } from '../actions'
+import { SubmitButton } from './submit-button'
 
-export default async function PrintGRN({
-  params,
+export default async function NewPurchasePage({
+  searchParams,
 }: {
-  params: Promise<{ id: string }>
+  searchParams: Promise<{ error?: string }>
 }) {
-  const { id } = await params
+  const { error } = await searchParams
   const supabase = await createClient()
 
-  // 1. Fetch GRN + PO + Supplier + COMPANY (Deep Fetch)
-  const { data: grn } = await supabase
-    .from('grn')
-    .select(`
-      *, 
-      purchases (
-        reference_no, 
-        suppliers (name, address, contact_person, phone),
-        companies (*) 
-      )
-    `)
-    .eq('id', id)
-    .single()
+  // 1. Fetch Suppliers
+  const { data: suppliers } = await supabase
+    .from('suppliers')
+    .select('id, name, currency')
+    .order('name')
 
-  if (!grn) return notFound()
+  // 2. Fetch Companies
+  const { data: companies } = await supabase
+    .from('companies')
+    .select('id, name')
+    .order('name')
 
-  // 2. Fetch Items
-  const { data: items } = await supabase
-    .from('grn_items')
-    .select(`*, variants(name, item_code, part_number)`)
-    .eq('grn_id', id)
-    .order('variant_id')
-
-  // Use the Company that issued the PO
-  const myCompany = grn.purchases?.companies || {
-    name: "Warehouse",
-    address: "",
-    phone: ""
-  }
+  const today = new Date().toISOString().split('T')[0]
 
   return (
-    <div className="max-w-3xl mx-auto border border-gray-200 p-8 print:border-0 print:p-0">
-      <PrintAction />
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center gap-4">
+        <Link href="/purchasing" className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+          <ArrowLeft size={20} />
+        </Link>
+        <h1 className="text-2xl font-bold text-gray-900">Create Purchase Order</h1>
+      </div>
 
-      {/* Header */}
-      <div className="flex justify-between items-start mb-8 border-b pb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-wide">Goods Received Note</h1>
-          <div className="mt-2 text-sm text-gray-500 whitespace-pre-line">
-             <p className="font-bold text-gray-900">{myCompany.name}</p>
-             {myCompany.address}
-             <p>Tel: {myCompany.phone}</p>
-             {myCompany.tin_number && <p>TIN: {myCompany.tin_number}</p>}
+      {error && (
+        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md">
+          {error}
+        </div>
+      )}
+
+      <form action={createPurchase} className="bg-white p-8 rounded-lg shadow border border-gray-200 space-y-6">
+        
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">Order Details</h2>
+          
+          <div className="bg-blue-50 p-3 rounded-md text-sm text-blue-800 border border-blue-200">
+             <strong>Note:</strong> PO Number will be auto-generated (e.g. POT260200001) upon creation.
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Issuing Company (Letterhead)</label>
+            <select
+              name="company_id"
+              required
+              className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-gray-50"
+            >
+              {companies?.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Select Supplier</label>
+            <select
+              name="supplier_id"
+              required
+              className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+            >
+              <option value="">-- Choose Supplier --</option>
+              {suppliers?.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.currency})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Date</label>
+              <input
+                name="purchase_date"
+                type="date"
+                defaultValue={today}
+                required
+                className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+               <label className="block text-sm font-medium text-gray-700">Exchange Rate (For USD)</label>
+               <input
+                  name="exchange_rate"
+                  type="number"
+                  step="0.0001"
+                  defaultValue="1.0000"
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+            </div>
           </div>
         </div>
-        <div className="text-right">
-          <h2 className="text-xl font-mono font-bold text-gray-700">{grn.grn_no}</h2>
-          <p className="text-sm text-gray-500 mt-1">Received Date: {grn.received_date}</p>
-          <p className="text-sm text-gray-500">PO Ref: <span className="font-bold">{grn.purchases?.reference_no}</span></p>
-        </div>
-      </div>
 
-      {/* Rest of the file remains the same... (Supplier Info, Table, Footer) */}
-      {/* ... */}
-      
-      {/* Supplier Info */}
-      <div className="mb-8 p-4 bg-gray-50 rounded-md border border-gray-100 print:bg-white print:border-gray-300">
-        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Supplier Details</h3>
-        <p className="font-bold text-lg">{grn.purchases?.suppliers?.name}</p>
-        <p className="text-sm text-gray-600 whitespace-pre-line">{grn.purchases?.suppliers?.address}</p>
-        <div className="mt-2 text-sm text-gray-500">
-            <span>Contact: {grn.purchases?.suppliers?.contact_person}</span>
-            <span className="mx-2">|</span>
-            <span>{grn.purchases?.suppliers?.phone}</span>
+        <div className="pt-4">
+          <SubmitButton />
         </div>
-      </div>
 
-      {/* Items Table */}
-      <table className="w-full mb-12">
-        <thead>
-          <tr className="border-b-2 border-black">
-            <th className="text-left py-2 text-sm font-bold uppercase">Item Code</th>
-            <th className="text-left py-2 text-sm font-bold uppercase">Description</th>
-            <th className="text-center py-2 text-sm font-bold uppercase">Ordered</th>
-            <th className="text-center py-2 text-sm font-bold uppercase">Received</th>
-            <th className="text-center py-2 text-sm font-bold uppercase">Variance</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items?.map((item: any) => {
-            const variance = item.received_qty - item.order_qty
-            return (
-              <tr key={item.id} className="border-b border-gray-200">
-                <td className="py-3 text-sm font-mono">{item.variants?.item_code}</td>
-                <td className="py-3 text-sm">
-                  <span className="block font-bold">{item.variants?.name}</span>
-                  <span className="text-xs text-gray-500">{item.variants?.part_number}</span>
-                </td>
-                <td className="text-center py-3 text-sm">{item.order_qty}</td>
-                <td className="text-center py-3 text-sm font-bold">{item.received_qty}</td>
-                <td className={`text-center py-3 text-sm font-bold ${variance < 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                  {variance === 0 ? '-' : variance}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-
-      {/* Signature Section */}
-      <div className="grid grid-cols-2 gap-12 mt-16 pt-8 border-t border-gray-200 break-inside-avoid">
-        <div>
-            <p className="text-xs uppercase font-bold text-gray-400 mb-12">Received & Verified By:</p>
-            <div className="border-t border-black w-3/4"></div>
-            <p className="text-sm mt-1">Storekeeper</p>
-        </div>
-        <div>
-            <p className="text-xs uppercase font-bold text-gray-400 mb-12">Authorized By:</p>
-            <div className="border-t border-black w-3/4"></div>
-            <p className="text-sm mt-1">Manager</p>
-        </div>
-      </div>
+      </form>
     </div>
   )
 }
