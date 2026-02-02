@@ -20,9 +20,18 @@ export async function createSupplier(formData: FormData) {
 
   const { error } = await supabase
     .from('suppliers')
-    .insert({ name, contact_person: contact, email, phone, address, currency })
+    .insert({
+      name,
+      contact_person: contact,
+      email,
+      phone,
+      address,
+      currency
+    })
 
-  if (error) return redirect(`/purchasing/suppliers/new?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/suppliers/new?error=${encodeURIComponent(error.message)}`)
+  }
 
   revalidatePath('/purchasing/suppliers')
   redirect('/purchasing/suppliers')
@@ -41,10 +50,19 @@ export async function updateSupplier(formData: FormData) {
 
   const { error } = await supabase
     .from('suppliers')
-    .update({ name, contact_person: contact, email, phone, address, currency })
+    .update({
+      name,
+      contact_person: contact,
+      email,
+      phone,
+      address,
+      currency
+    })
     .eq('id', id)
 
-  if (error) return redirect(`/purchasing/suppliers/${id}?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/suppliers/${id}?error=${encodeURIComponent(error.message)}`)
+  }
 
   revalidatePath('/purchasing/suppliers')
   redirect('/purchasing/suppliers')
@@ -71,7 +89,7 @@ export async function createPurchase(formData: FormData) {
     .single()
 
   if (existingRef) {
-    return redirect(`/purchasing/new?error=Reference No "${referenceNo}" already exists. Please use a unique number.`)
+    return redirect(`/purchasing/new?error=Reference No "${referenceNo}" already exists.`)
   }
 
   // 2. Get Supplier Details
@@ -81,7 +99,9 @@ export async function createPurchase(formData: FormData) {
     .eq('id', supplierId)
     .single()
 
-  if (!supplier) return redirect(`/purchasing/new?error=Supplier not found`)
+  if (!supplier) {
+    return redirect(`/purchasing/new?error=Supplier not found`)
+  }
 
   // 3. Create Header
   const { data: newPurchase, error } = await supabase
@@ -98,7 +118,9 @@ export async function createPurchase(formData: FormData) {
     .select('id')
     .single()
 
-  if (error) return redirect(`/purchasing/new?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/new?error=${encodeURIComponent(error.message)}`)
+  }
 
   revalidatePath('/purchasing')
   redirect(`/purchasing/${newPurchase.id}`)
@@ -116,7 +138,9 @@ export async function addItemToPurchase(formData: FormData) {
   const quantity = parseInt(formData.get('quantity') as string)
   const unitCost = parseFloat(formData.get('unit_cost') as string)
 
-  if (!variantId) return redirect(`/purchasing/${purchaseId}?error=Please select a product`)
+  if (!variantId) {
+    return redirect(`/purchasing/${purchaseId}?error=Please select a product`)
+  }
 
   const totalCost = quantity * unitCost
 
@@ -130,7 +154,9 @@ export async function addItemToPurchase(formData: FormData) {
       total_cost: totalCost
     })
 
-  if (error) return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  }
 
   await calculatePurchaseTotal(purchaseId, supabase)
   revalidatePath(`/purchasing/${purchaseId}`)
@@ -143,7 +169,9 @@ export async function removeItemFromPurchase(formData: FormData) {
 
   const { error } = await supabase.from('purchase_items').delete().eq('id', itemId)
 
-  if (error) return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  if (error) {
+    return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
+  }
 
   await calculatePurchaseTotal(purchaseId, supabase)
   revalidatePath(`/purchasing/${purchaseId}`)
@@ -153,40 +181,7 @@ export async function completePurchase(formData: FormData) {
   const supabase = await createClient()
   const purchaseId = formData.get('purchase_id') as string
 
-  const { error } = await supabase
-    .from('purchases')
-    .update({ status: 'Completed' })
-    .eq('id', purchaseId)
-
-  if (error) return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
-
-  revalidatePath('/purchasing')
-  revalidatePath('/inventory')
-  redirect('/purchasing')
-}
-
-// Helper: Recalculate Totals
-async function calculatePurchaseTotal(purchaseId: string, supabase: any) {
-  const { data: items } = await supabase
-    .from('purchase_items')
-    .select('total_cost')
-    .eq('purchase_id', purchaseId)
-
-  const total = items?.reduce((sum: number, item: any) => sum + item.total_cost, 0) || 0
-
-  await supabase
-    .from('purchases')
-    .update({ total_amount: total })
-    .eq('id', purchaseId)
-}
-// ... keep previous imports and functions ...
-
-export async function completePurchase(formData: FormData) {
-  const supabase = await createClient()
-  const purchaseId = formData.get('purchase_id') as string
-
-  // CHANGED: Status becomes 'Ordered' instead of 'Completed'. 
-  // Stock is NOT added here anymore.
+  // CHANGED: Status becomes 'Ordered'. Stock is NOT added here.
   const { error } = await supabase
     .from('purchases')
     .update({ status: 'Ordered' })
@@ -200,4 +195,17 @@ export async function completePurchase(formData: FormData) {
   redirect('/purchasing')
 }
 
-// ... keep helper function ...
+// Helper: Recalculate Total
+async function calculatePurchaseTotal(purchaseId: string, supabase: any) {
+  const { data: items } = await supabase
+    .from('purchase_items')
+    .select('total_cost')
+    .eq('purchase_id', purchaseId)
+
+  const total = items?.reduce((sum: number, item: any) => sum + item.total_cost, 0) || 0
+
+  await supabase
+    .from('purchases')
+    .update({ total_amount: total })
+    .eq('id', purchaseId)
+}

@@ -17,7 +17,7 @@ export async function createGRNFromPO(purchaseId: string) {
 
   if (!po) throw new Error("PO not found")
 
-  // 2. Generate GRN Number (Simple timestamp based)
+  // 2. Generate GRN Number
   const grnNo = `GRN-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000)}`
 
   // 3. Create GRN Header

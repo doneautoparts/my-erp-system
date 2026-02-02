@@ -4,7 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { removeItemFromPurchase, completePurchase } from '../actions'
 import { notFound, redirect } from 'next/navigation'
 import AddPurchaseItemForm from './add-item-form'
-import { createGRNFromPO } from '../../inventory/grn/actions' // Import the new action
+import { createGRNFromPO } from '../../inventory/grn/actions'
 
 export default async function PurchaseDetailPage({
   params,
@@ -50,7 +50,7 @@ export default async function PurchaseDetailPage({
   const isPending = purchase.status === 'Pending'
   const isOrdered = purchase.status === 'Ordered'
 
-  // Server Action to trigger GRN creation directly from UI
+  // Server Action to trigger GRN
   async function generateGRN() {
     'use server'
     const grnId = await createGRNFromPO(id)
@@ -81,7 +81,7 @@ export default async function PurchaseDetailPage({
             >
               <Printer size={14} /> Print PO
             </Link>
-            <span className="px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${isOrdered ? 'bg-blue-100 text-blue-800' : isPending ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
                 {purchase.status}
             </span>
         </div>
