@@ -8,9 +8,10 @@ export default async function DocumentCenter({
   searchParams: Promise<{ view?: string }>
 }) {
   const { view } = await searchParams
-  const activeView = view || 'sale' // Changed default to Sales
+  const activeView = view || 'sale'
   const supabase = await createClient()
 
+  // Explicit type to avoid errors
   let docs: any[] = []
 
   if (activeView === 'po') {
@@ -101,12 +102,12 @@ export default async function DocumentCenter({
                 status = balance <= 0 ? 'PAID' : `Owe: ${balance.toFixed(2)}`
                 link = `/print/sales/${doc.id}`
               } else if (activeView === 'payment') {
-                docNo = 'PAYMENT'
+                docNo = 'RCT' // Generic prefix
                 date = doc.payment_date
                 name = doc.sales?.customers?.name || doc.sales?.customer_name
-                status = `RM ${doc.amount} (${doc.method})`
-                // No print link for individual payment receipt yet, can link to invoice
-                link = `/print/sales/${doc.sales?.id}` 
+                status = `RM ${doc.amount}`
+                // FIX: Link to the new payment print page
+                link = `/print/payment/${doc.id}` 
               }
 
               return (
