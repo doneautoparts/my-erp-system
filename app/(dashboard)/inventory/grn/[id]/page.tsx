@@ -1,8 +1,10 @@
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle, PackageCheck } from 'lucide-react'
+import { ArrowLeft, AlertCircle, Printer } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 import { updateGrnItem, confirmGRN } from '../actions'
 import { notFound } from 'next/navigation'
+import ConfirmGRNButton from './confirm-button' // Import Animated Button
+import SaveQtyButton from './save-qty-button'   // Import Animated Button
 
 export default async function GRNDetailPage({
   params,
@@ -15,6 +17,7 @@ export default async function GRNDetailPage({
   const { error } = await searchParams
   const supabase = await createClient()
 
+  // Fetch GRN Header
   const { data: grn } = await supabase
     .from('grn')
     .select(`*, purchases(reference_no, suppliers(name))`)
@@ -23,6 +26,7 @@ export default async function GRNDetailPage({
 
   if (!grn) return notFound()
 
+  // Fetch GRN Items
   const { data: items } = await supabase
     .from('grn_items')
     .select(`*, variants(name, item_code, part_number)`)
@@ -33,9 +37,10 @@ export default async function GRNDetailPage({
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/inventory" className="p-2 rounded-full hover:bg-gray-200">
+          <Link href="/inventory" className="p-2 rounded-full hover:bg-gray-200 transition-colors">
             <ArrowLeft size={20} />
           </Link>
           <div>
@@ -45,13 +50,26 @@ export default async function GRNDetailPage({
             </p>
           </div>
         </div>
-        <span className={`px-3 py-1 rounded-full text-sm font-medium ${isCompleted ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
-            {grn.status}
-        </span>
+        
+        <div className="flex items-center gap-2">
+            {/* PRINT BUTTON (Only show if completed, or allow drafting if needed) */}
+            <Link 
+              href={`/print/grn/${grn.id}`} 
+              target="_blank"
+              className="flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300 transition-colors"
+            >
+              <Printer size={14} /> Print GRN
+            </Link>
+
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${isCompleted ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                {grn.status}
+            </span>
+        </div>
       </div>
 
-      {error && <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md">{error}</div>}
+      {error && <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md flex items-center gap-2"><AlertCircle size={18}/> {error}</div>}
 
+      {/* Items Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -71,18 +89,21 @@ export default async function GRNDetailPage({
                 <td className="px-6 py-4 text-center text-gray-500">{item.order_qty}</td>
                 <td className="px-6 py-4 text-center">
                   {isCompleted ? (
-                    <span className="font-bold text-green-700">{item.received_qty}</span>
+                    <span className={`font-bold ${item.received_qty < item.order_qty ? 'text-red-600' : 'text-green-700'}`}>
+                        {item.received_qty}
+                    </span>
                   ) : (
-                    <form action={updateGrnItem} className="flex justify-center">
+                    <form action={updateGrnItem} className="flex justify-center items-center">
                         <input type="hidden" name="item_id" value={item.id} />
                         <input type="hidden" name="grn_id" value={grn.id} />
                         <input 
                             name="received_qty" 
                             type="number" 
                             defaultValue={item.received_qty} 
-                            className="w-20 text-center border-gray-300 rounded-md p-1"
+                            className="w-20 text-center border-gray-300 rounded-md p-1 focus:ring-blue-500 focus:border-blue-500"
                         />
-                        <button className="ml-2 text-xs text-blue-600 hover:underline">Save</button>
+                        {/* ANIMATED SAVE BUTTON */}
+                        <SaveQtyButton />
                     </form>
                   )}
                 </td>
@@ -92,17 +113,17 @@ export default async function GRNDetailPage({
         </table>
       </div>
 
+      {/* Action Footer */}
       {!isCompleted && (
-        <div className="bg-green-50 p-6 rounded-lg border border-green-200 text-center">
+        <div className="bg-green-50 p-6 rounded-lg border border-green-200 text-center shadow-sm">
             <h3 className="text-lg font-bold text-green-900 mb-2">Verify & Receive Stock</h3>
             <p className="text-sm text-green-700 mb-4">
-                This will update your inventory levels based on the "Received" quantity.
+                Please verify all quantities above. Clicking confirm will update your live inventory.
             </p>
             <form action={confirmGRN}>
                <input type="hidden" name="grn_id" value={grn.id} />
-               <button className="w-full md:w-auto flex items-center justify-center gap-2 bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-500 mx-auto">
-                 <PackageCheck size={20} /> Confirm Receipt
-               </button>
+               {/* ANIMATED CONFIRM BUTTON */}
+               <ConfirmGRNButton disabled={!items || items.length === 0} />
             </form>
         </div>
       )}
