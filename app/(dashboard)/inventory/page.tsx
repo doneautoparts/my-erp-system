@@ -24,9 +24,9 @@ export default async function InventoryPage({
     `)
     .order('created_at', { ascending: false })
 
-  // Search by Item Code, SKU, or Product Name
+  // NEW: Search the "search_text" column which contains Brand + Model + Code
   if (query) {
-    request = request.or(`item_code.ilike.%${query}%,sku.ilike.%${query}%,part_number.ilike.%${query}%`)
+    request = request.ilike('search_text', `%${query}%`)
   }
 
   const { data: variants, error } = await request
@@ -55,7 +55,7 @@ export default async function InventoryPage({
            <input
             name="q"
             defaultValue={query}
-            placeholder="Search Item Code (SAFST), SKU..."
+            placeholder="Search Model (Wira), Brand (Proride), Code..."
             className="w-full rounded-md border-0 py-2.5 pl-10 pr-4 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-600"
           />
         </form>
@@ -113,7 +113,7 @@ export default async function InventoryPage({
             {variants?.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                  No items found. Click "Add New Item" to start.
+                  {query ? `No items matching "${query}"` : 'No items found.'}
                 </td>
               </tr>
             )}
