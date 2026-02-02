@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { FileText, Truck, Printer } from 'lucide-react'
+import { Printer } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 
 export default async function DocumentCenter({
@@ -11,7 +11,8 @@ export default async function DocumentCenter({
   const activeView = view || 'po'
   const supabase = await createClient()
 
-  let docs = []
+  // FIX: Explicitly tell TypeScript this array can hold any type of object
+  let docs: any[] = []
 
   if (activeView === 'po') {
     const { data } = await supabase
@@ -83,6 +84,13 @@ export default async function DocumentCenter({
                 </td>
               </tr>
             ))}
+            {docs.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
+                  No documents found.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
