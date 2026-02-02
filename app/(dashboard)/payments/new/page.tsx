@@ -13,7 +13,6 @@ export default async function NewPaymentPage({
   const today = new Date().toISOString().split('T')[0]
 
   // Fetch Unpaid/Partial Sales
-  // We fetch ALL sales for dropdown, but visually mark paid ones
   const { data: sales } = await supabase
     .from('sales')
     .select('id, reference_no, customer_name, total_amount, paid_amount, customers(name)')
@@ -42,12 +41,19 @@ export default async function NewPaymentPage({
             className="mt-1 block w-full rounded-md border border-gray-300 p-3 bg-white"
           >
             <option value="">-- Choose Invoice --</option>
-            {sales?.map(s => {
+            {/* FIX: Added (s: any) to bypass TypeScript strict array/object check */}
+            {sales?.map((s: any) => {
               const balance = (s.total_amount || 0) - (s.paid_amount || 0)
               const isPaid = balance <= 0
+              
+              // Handle potential array vs object structure for customers
+              const custName = Array.isArray(s.customers) 
+                ? s.customers[0]?.name 
+                : s.customers?.name
+
               return (
                 <option key={s.id} value={s.id} className={isPaid ? 'text-green-600' : 'text-red-600'}>
-                  {s.reference_no || 'Ref ???'} - {s.customers?.name || s.customer_name} 
+                  {s.reference_no || 'Ref ???'} - {custName || s.customer_name} 
                   {isPaid ? ' (PAID)' : ` (Owe: RM ${balance.toFixed(2)})`}
                 </option>
               )
