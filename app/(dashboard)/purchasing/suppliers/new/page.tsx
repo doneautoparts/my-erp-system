@@ -27,6 +27,16 @@ export default function NewSupplierPage() {
             />
           </div>
 
+          {/* NEW TIN FIELD */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">TIN Number (Tax ID)</label>
+            <input
+              name="tin_number"
+              placeholder="e.g. C2588563300"
+              className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono text-sm"
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">Contact Person</label>
@@ -65,7 +75,6 @@ export default function NewSupplierPage() {
             </div>
           </div>
 
-          {/* NEW ADDRESS FIELD */}
           <div>
             <label className="block text-sm font-medium text-gray-700">Full Address</label>
             <textarea

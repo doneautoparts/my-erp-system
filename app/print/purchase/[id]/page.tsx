@@ -23,16 +23,15 @@ export default async function PrintPurchaseOrder({
 
   if (!purchase) return notFound()
 
-  // Use the linked company, or fallback if something is wrong (shouldn't happen)
   const myCompany = purchase.companies || {
     name: "Unknown Company",
-    address: "Please update company details",
+    address: "",
     city: "",
     phone: "",
-    email: ""
+    email: "",
+    tin_number: ""
   }
 
-  // Fetch Items
   const { data: items } = await supabase
     .from('purchase_items')
     .select(`*, variants(products(name, brands(name)), name, part_number)`)
@@ -52,6 +51,8 @@ export default async function PrintPurchaseOrder({
              <p>{myCompany.city}</p>
              <p>Tel: {myCompany.phone}</p>
              <p>{myCompany.email}</p>
+             {/* MY TIN */}
+             {myCompany.tin_number && <p className="font-mono text-xs mt-1">TIN: {myCompany.tin_number}</p>}
           </div>
         </div>
         <div className="text-right">
@@ -66,8 +67,6 @@ export default async function PrintPurchaseOrder({
         <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Vendor / Supplier</h3>
         <div className="text-sm text-gray-700">
           <p className="font-bold text-lg text-gray-900">{purchase.suppliers?.name}</p>
-          
-          {/* ADDRESS SECTION */}
           {purchase.suppliers?.address && (
             <p className="whitespace-pre-line mb-2 text-gray-600">{purchase.suppliers.address}</p>
           )}
@@ -76,6 +75,8 @@ export default async function PrintPurchaseOrder({
             <p><span className="font-semibold">Attn:</span> {purchase.suppliers?.contact_person}</p>
             <p>{purchase.suppliers?.email}</p>
             <p>{purchase.suppliers?.phone}</p>
+            {/* SUPPLIER TIN */}
+            {purchase.suppliers?.tin_number && <p className="font-mono text-xs mt-1">TIN: {purchase.suppliers.tin_number}</p>}
           </div>
         </div>
       </div>
@@ -119,7 +120,6 @@ export default async function PrintPurchaseOrder({
         </div>
       </div>
 
-      {/* Footer */}
       <div className="mt-16 pt-8 border-t border-gray-200 text-xs text-center text-gray-400">
         <p>This is a computer-generated document. No signature is required.</p>
         <p>{myCompany.name} - ERP System Management</p>

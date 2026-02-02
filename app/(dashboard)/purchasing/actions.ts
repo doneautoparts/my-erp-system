@@ -16,6 +16,7 @@ export async function createSupplier(formData: FormData) {
   const email = formData.get('email') as string
   const phone = formData.get('phone') as string
   const address = formData.get('address') as string
+  const tin_number = formData.get('tin_number') as string // <--- NEW
   const currency = formData.get('currency') as string
 
   const { error } = await supabase
@@ -26,12 +27,11 @@ export async function createSupplier(formData: FormData) {
       email,
       phone,
       address,
+      tin_number, // <--- SAVE
       currency
     })
 
-  if (error) {
-    return redirect(`/purchasing/suppliers/new?error=${encodeURIComponent(error.message)}`)
-  }
+  if (error) return redirect(`/purchasing/suppliers/new?error=${encodeURIComponent(error.message)}`)
 
   revalidatePath('/purchasing/suppliers')
   redirect('/purchasing/suppliers')
@@ -46,6 +46,7 @@ export async function updateSupplier(formData: FormData) {
   const email = formData.get('email') as string
   const phone = formData.get('phone') as string
   const address = formData.get('address') as string
+  const tin_number = formData.get('tin_number') as string // <--- NEW
   const currency = formData.get('currency') as string
 
   const { error } = await supabase
@@ -56,13 +57,12 @@ export async function updateSupplier(formData: FormData) {
       email,
       phone,
       address,
+      tin_number, // <--- UPDATE
       currency
     })
     .eq('id', id)
 
-  if (error) {
-    return redirect(`/purchasing/suppliers/${id}?error=${encodeURIComponent(error.message)}`)
-  }
+  if (error) return redirect(`/purchasing/suppliers/${id}?error=${encodeURIComponent(error.message)}`)
 
   revalidatePath('/purchasing/suppliers')
   redirect('/purchasing/suppliers')
@@ -76,13 +76,12 @@ export async function createPurchase(formData: FormData) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const companyId = formData.get('company_id') as string // <--- NEW
+  const companyId = formData.get('company_id') as string
   const supplierId = formData.get('supplier_id') as string
   const referenceNo = formData.get('reference_no') as string
   const purchaseDate = formData.get('purchase_date') as string
   const exchangeRate = parseFloat(formData.get('exchange_rate') as string) || 1.0
 
-  // 1. Check for Duplicate Reference Number
   const { data: existingRef } = await supabase
     .from('purchases')
     .select('id')
@@ -93,22 +92,18 @@ export async function createPurchase(formData: FormData) {
     return redirect(`/purchasing/new?error=Reference No "${referenceNo}" already exists.`)
   }
 
-  // 2. Get Supplier Details
   const { data: supplier } = await supabase
     .from('suppliers')
     .select('currency')
     .eq('id', supplierId)
     .single()
 
-  if (!supplier) {
-    return redirect(`/purchasing/new?error=Supplier not found`)
-  }
+  if (!supplier) return redirect(`/purchasing/new?error=Supplier not found`)
 
-  // 3. Create Header
   const { data: newPurchase, error } = await supabase
     .from('purchases')
     .insert({
-      company_id: companyId, // <--- SAVING SELECTION
+      company_id: companyId,
       supplier_id: supplierId,
       reference_no: referenceNo,
       purchase_date: purchaseDate,
@@ -120,9 +115,7 @@ export async function createPurchase(formData: FormData) {
     .select('id')
     .single()
 
-  if (error) {
-    return redirect(`/purchasing/new?error=${encodeURIComponent(error.message)}`)
-  }
+  if (error) return redirect(`/purchasing/new?error=${encodeURIComponent(error.message)}`)
 
   revalidatePath('/purchasing')
   redirect(`/purchasing/${newPurchase.id}`)
@@ -140,9 +133,7 @@ export async function addItemToPurchase(formData: FormData) {
   const quantity = parseInt(formData.get('quantity') as string)
   const unitCost = parseFloat(formData.get('unit_cost') as string)
 
-  if (!variantId) {
-    return redirect(`/purchasing/${purchaseId}?error=Please select a product`)
-  }
+  if (!variantId) return redirect(`/purchasing/${purchaseId}?error=Please select a product`)
 
   const totalCost = quantity * unitCost
 
@@ -156,9 +147,7 @@ export async function addItemToPurchase(formData: FormData) {
       total_cost: totalCost
     })
 
-  if (error) {
-    return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
-  }
+  if (error) return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
 
   await calculatePurchaseTotal(purchaseId, supabase)
   revalidatePath(`/purchasing/${purchaseId}`)
@@ -171,9 +160,7 @@ export async function removeItemFromPurchase(formData: FormData) {
 
   const { error } = await supabase.from('purchase_items').delete().eq('id', itemId)
 
-  if (error) {
-    return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
-  }
+  if (error) return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
 
   await calculatePurchaseTotal(purchaseId, supabase)
   revalidatePath(`/purchasing/${purchaseId}`)
@@ -188,9 +175,7 @@ export async function completePurchase(formData: FormData) {
     .update({ status: 'Ordered' })
     .eq('id', purchaseId)
 
-  if (error) {
-    return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
-  }
+  if (error) return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(error.message)}`)
 
   revalidatePath('/purchasing')
   redirect('/purchasing')

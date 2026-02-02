@@ -10,9 +10,10 @@ export default async function PrintInvoice({
   const { id } = await params
   const supabase = await createClient()
 
+  // Fetch Sale + Customer
   const { data: sale } = await supabase
     .from('sales')
-    .select(`*`)
+    .select(`*, customers(*)`)
     .eq('id', id)
     .single()
 
@@ -23,13 +24,12 @@ export default async function PrintInvoice({
     .select(`*, variants(products(name, brands(name)), name, part_number)`)
     .eq('sale_id', id)
 
-  // --- COMPANY INFO ---
-  const myCompany = {
-    name: "D ONE AUTOPART ENTERPRISE (201203206722)",
-    address: "No 810G, Kompleks Diamond, Bangi Business Centre,",
-    city: "43650 Bandar Baru Bangi, Selangor",
-    phone: "+6017-691 8679     Email: doneautoparts@gmail.com"
-  }
+  // Fetch My Company (Default to first one for now)
+  const { data: myCompany } = await supabase
+    .from('companies')
+    .select('*')
+    .limit(1)
+    .single()
 
   return (
     <div className="max-w-3xl mx-auto border border-gray-200 p-8 print:border-0 print:p-0">
@@ -37,16 +37,28 @@ export default async function PrintInvoice({
 
       {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold">{myCompany.name}</h1>
-        <p className="text-sm">{myCompany.address}, {myCompany.city}</p>
-        <p className="text-sm">Tel: {myCompany.phone}</p>
+        <h1 className="text-2xl font-bold">{myCompany?.name || 'My Company'}</h1>
+        <p className="text-sm whitespace-pre-line">{myCompany?.address}</p>
+        <p className="text-sm">Tel: {myCompany?.phone}</p>
+        {myCompany?.tin_number && <p className="text-xs font-mono mt-1">TIN: {myCompany.tin_number}</p>}
       </div>
 
       <div className="flex justify-between items-center mb-6 border-y border-gray-300 py-4">
         <div>
            <p className="text-xs font-bold uppercase text-gray-500">Bill To</p>
-           <p className="font-bold text-lg">{sale.customer_name || 'Walk-in Customer'}</p>
-           <p className="text-sm text-gray-600">{sale.channel}</p>
+           {sale.customers ? (
+             <>
+                <p className="font-bold text-lg">{sale.customers.name}</p>
+                {sale.customers.company_name && <p className="text-sm text-gray-700">{sale.customers.company_name}</p>}
+                <p className="text-sm text-gray-600 whitespace-pre-line">{sale.customers.address}</p>
+                {sale.customers.tin_number && <p className="text-xs font-mono mt-1">TIN: {sale.customers.tin_number}</p>}
+             </>
+           ) : (
+             <>
+                <p className="font-bold text-lg">{sale.customer_name || 'Walk-in Customer'}</p>
+                <p className="text-sm text-gray-600">{sale.channel}</p>
+             </>
+           )}
         </div>
         <div className="text-right">
            <h2 className="text-xl font-bold uppercase text-gray-800">INVOICE</h2>
@@ -92,7 +104,6 @@ export default async function PrintInvoice({
         </div>
       </div>
 
-      {/* Footer */}
       <div className="mt-12 text-center text-xs text-gray-500">
         <p>Thank you for your business!</p>
         <p>Goods sold are not returnable without original receipt.</p>
