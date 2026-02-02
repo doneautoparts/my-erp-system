@@ -10,30 +10,33 @@ export default async function PrintPurchaseOrder({
   const { id } = await params
   const supabase = await createClient()
 
-  // Fetch Purchase + Supplier Details
+  // Fetch Purchase + Supplier + Company Details
   const { data: purchase } = await supabase
     .from('purchases')
-    .select(`*, suppliers(*)`)
+    .select(`
+      *, 
+      suppliers(*),
+      companies(*)
+    `)
     .eq('id', id)
     .single()
 
   if (!purchase) return notFound()
+
+  // Use the linked company, or fallback if something is wrong (shouldn't happen)
+  const myCompany = purchase.companies || {
+    name: "Unknown Company",
+    address: "Please update company details",
+    city: "",
+    phone: "",
+    email: ""
+  }
 
   // Fetch Items
   const { data: items } = await supabase
     .from('purchase_items')
     .select(`*, variants(products(name, brands(name)), name, part_number)`)
     .eq('purchase_id', id)
-
-  // --- COMPANY INFO (HARDCODED FOR NOW) ---
-  // You can change this to your actual company details
-  const myCompany = {
-    name: "DONE AUTO PARTS",
-    address: "No. 123, Jalan Automotive 1, Industrial Park",
-    city: "50000 Kuala Lumpur",
-    phone: "+60 3-1234 5678",
-    email: "admin@doneautoparts.com"
-  }
 
   return (
     <div className="max-w-3xl mx-auto border border-gray-200 p-8 print:border-0 print:p-0">
@@ -45,9 +48,10 @@ export default async function PrintPurchaseOrder({
           <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-wide">Purchase Order</h1>
           <div className="mt-2 text-sm text-gray-500">
              <p className="font-bold text-gray-900">{myCompany.name}</p>
-             <p>{myCompany.address}</p>
+             <p className="whitespace-pre-line">{myCompany.address}</p>
              <p>{myCompany.city}</p>
              <p>Tel: {myCompany.phone}</p>
+             <p>{myCompany.email}</p>
           </div>
         </div>
         <div className="text-right">
@@ -118,7 +122,7 @@ export default async function PrintPurchaseOrder({
       {/* Footer */}
       <div className="mt-16 pt-8 border-t border-gray-200 text-xs text-center text-gray-400">
         <p>This is a computer-generated document. No signature is required.</p>
-        <p>{myCompany.name} - ERP System Mgmt</p>
+        <p>{myCompany.name} - ERP System Management</p>
       </div>
     </div>
   )

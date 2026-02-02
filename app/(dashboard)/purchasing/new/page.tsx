@@ -12,10 +12,16 @@ export default async function NewPurchasePage({
   const { error } = await searchParams
   const supabase = await createClient()
 
-  // Fetch supplierss
+  // 1. Fetch Suppliers
   const { data: suppliers } = await supabase
     .from('suppliers')
     .select('id, name, currency')
+    .order('name')
+
+  // 2. Fetch Companies (NEW)
+  const { data: companies } = await supabase
+    .from('companies')
+    .select('id, name')
     .order('name')
 
   const today = new Date().toISOString().split('T')[0]
@@ -40,6 +46,22 @@ export default async function NewPurchasePage({
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">Order Details</h2>
           
+          {/* NEW: Company Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Issuing Company (Letterhead)</label>
+            <select
+              name="company_id"
+              required
+              className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-gray-50"
+            >
+              {companies?.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700">Select Supplier</label>
             <select

@@ -76,6 +76,7 @@ export async function createPurchase(formData: FormData) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  const companyId = formData.get('company_id') as string // <--- NEW
   const supplierId = formData.get('supplier_id') as string
   const referenceNo = formData.get('reference_no') as string
   const purchaseDate = formData.get('purchase_date') as string
@@ -107,6 +108,7 @@ export async function createPurchase(formData: FormData) {
   const { data: newPurchase, error } = await supabase
     .from('purchases')
     .insert({
+      company_id: companyId, // <--- SAVING SELECTION
       supplier_id: supplierId,
       reference_no: referenceNo,
       purchase_date: purchaseDate,
@@ -181,7 +183,6 @@ export async function completePurchase(formData: FormData) {
   const supabase = await createClient()
   const purchaseId = formData.get('purchase_id') as string
 
-  // CHANGED: Status becomes 'Ordered'. Stock is NOT added here.
   const { error } = await supabase
     .from('purchases')
     .update({ status: 'Ordered' })
