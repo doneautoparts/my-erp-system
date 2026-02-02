@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import { Plus, FileText } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
+import NewPurchaseButton from './new-purchase-button'
 
 export default async function PurchasingPage() {
   const supabase = await createClient()
@@ -18,13 +18,9 @@ export default async function PurchasingPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Purchase Orders</h1>
-        <Link
-          href="/purchasing/new"
-          className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
-        >
-          <Plus size={16} />
-          New Purchase Order
-        </Link>
+        
+        {/* Swapped static Link for interactive Button */}
+        <NewPurchaseButton />
       </div>
 
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow">
