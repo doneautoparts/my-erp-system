@@ -1,6 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
 import { BarChart3, Box, Calculator } from 'lucide-react'
-import Link from 'next/link'
 
 export default async function AnalysisPage({
   searchParams,
@@ -80,9 +79,18 @@ export default async function AnalysisPage({
             className="flex-1 rounded-md border border-gray-300 p-2"
           >
             <option value="">-- Choose PO --</option>
-            {purchases?.map(p => (
-              <option key={p.id} value={p.id}>{p.reference_no} - {p.suppliers?.name}</option>
-            ))}
+            {/* FIX: Handle potential array/object structure for suppliers */}
+            {purchases?.map((p: any) => {
+               const supplierName = Array.isArray(p.suppliers) 
+                 ? p.suppliers[0]?.name 
+                 : p.suppliers?.name
+                 
+               return (
+                 <option key={p.id} value={p.id}>
+                   {p.reference_no} - {supplierName}
+                 </option>
+               )
+            })}
           </select>
           <button className="bg-indigo-600 text-white px-6 py-2 rounded-md font-semibold hover:bg-indigo-500">
             Analyze
