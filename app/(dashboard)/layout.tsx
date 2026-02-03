@@ -7,7 +7,8 @@ import {
   Users,
   FileText, 
   LogOut,
-  CreditCard 
+  CreditCard,
+  BarChart3 
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
@@ -51,21 +52,23 @@ export default async function DashboardLayout({
             <TrendingUp size={20} />
             <span>Sales</span>
           </Link>
-          
-          {/* NEW PAYMENTS LINK */}
           <Link href="/payments" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors">
             <CreditCard size={20} />
             <span>Payments</span>
           </Link>
-
           <Link href="/customers" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors">
             <Users size={20} />
             <span>Customers</span>
           </Link>
-          
           <Link href="/documents" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors">
             <FileText size={20} />
             <span>Documents</span>
+          </Link>
+          
+          {/* NEW ANALYSIS LINK */}
+          <Link href="/analysis" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors">
+            <BarChart3 size={20} />
+            <span>Analysis (CBM)</span>
           </Link>
 
           <Link href="/reports" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors">

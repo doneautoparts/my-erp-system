@@ -55,7 +55,6 @@ export default async function EditItemPage({
 
       <form action={updateItem} className="bg-white p-8 rounded-lg shadow border border-gray-200 space-y-8">
         
-        {/* HIDDEN IDs */}
         <input type="hidden" name="id" value={item.id} />
         <input type="hidden" name="product_id" value={item.products?.id} />
 
@@ -113,7 +112,6 @@ export default async function EditItemPage({
         {/* 3. Pricing */}
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">3. Pricing Structure</h2>
-          
           <div className="grid grid-cols-2 gap-6 bg-gray-50 p-4 rounded-md">
             <div>
                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Cost (Reference)</label>
@@ -128,7 +126,6 @@ export default async function EditItemPage({
                  </div>
                </div>
             </div>
-
             <div>
                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Selling Prices (RM)</label>
                <div className="grid grid-cols-3 gap-2">
@@ -160,6 +157,30 @@ export default async function EditItemPage({
              <div>
               <label className="block text-sm font-medium text-gray-700">Low Stock Alert</label>
               <input name="min_stock" type="number" defaultValue={item.min_stock_level} className="form-input" />
+            </div>
+          </div>
+        </div>
+
+        {/* 5. CBM ANALYSIS (NEW SECTION) */}
+        <div className="space-y-4 bg-blue-50 p-4 rounded-md border border-blue-200">
+          <h2 className="text-lg font-semibold text-blue-900 border-b border-blue-200 pb-2">5. Packaging & CBM Analysis</h2>
+          <div className="grid grid-cols-4 gap-4">
+             <div>
+              <label className="block text-sm font-medium text-blue-800">Items per Master Carton</label>
+              <input name="ctn_qty" type="number" defaultValue={item.ctn_qty || 1} className="form-input border-blue-300" />
+              <p className="text-xs text-blue-600 mt-1">e.g. 10 Shocks / Ctn</p>
+            </div>
+             <div>
+              <label className="block text-sm font-medium text-blue-800">Length (cm)</label>
+              <input name="ctn_len" type="number" step="0.1" defaultValue={item.ctn_len || 0} className="form-input border-blue-300" />
+            </div>
+             <div>
+              <label className="block text-sm font-medium text-blue-800">Width (cm)</label>
+              <input name="ctn_wid" type="number" step="0.1" defaultValue={item.ctn_wid || 0} className="form-input border-blue-300" />
+            </div>
+             <div>
+              <label className="block text-sm font-medium text-blue-800">Height (cm)</label>
+              <input name="ctn_height" type="number" step="0.1" defaultValue={item.ctn_height || 0} className="form-input border-blue-300" />
             </div>
           </div>
         </div>

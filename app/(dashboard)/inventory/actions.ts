@@ -31,6 +31,12 @@ export async function createItem(formData: FormData) {
   const minStock = parseInt(formData.get('min_stock') as string) || 5
   const packingRatio = parseInt(formData.get('packing_ratio') as string) || 1
 
+  // NEW: Packaging / CBM Data
+  const ctnQty = parseInt(formData.get('ctn_qty') as string) || 1
+  const ctnLen = parseFloat(formData.get('ctn_len') as string) || 0
+  const ctnWid = parseFloat(formData.get('ctn_wid') as string) || 0
+  const ctnHeight = parseFloat(formData.get('ctn_height') as string) || 0
+
   // Generate Name
   let variantName = [position, type].filter(Boolean).join(' - ')
   if (!variantName) variantName = 'Standard'
@@ -72,7 +78,12 @@ export async function createItem(formData: FormData) {
         price_proposal: priceProposal,
         stock_quantity: stock,
         min_stock_level: minStock,
-        packing_ratio: packingRatio
+        packing_ratio: packingRatio,
+        // NEW FIELDS
+        ctn_qty: ctnQty,
+        ctn_len: ctnLen,
+        ctn_wid: ctnWid,
+        ctn_height: ctnHeight
       })
 
     if (variantError) throw new Error(`Inventory Error: ${variantError.message}`)
@@ -85,12 +96,12 @@ export async function createItem(formData: FormData) {
   redirect('/inventory')
 }
 
-// --- 2. UPDATE EXISTING ITEM (FIXED LOGIC) ---
+// --- 2. UPDATE EXISTING ITEM ---
 export async function updateItem(formData: FormData) {
   const supabase = await createClient()
 
   const variantId = formData.get('id') as string
-  const oldProductId = formData.get('product_id') as string // The ID it belongs to currently
+  const oldProductId = formData.get('product_id') as string
 
   // Extract Data
   const productName = (formData.get('product_name') as string).trim()
@@ -111,59 +122,36 @@ export async function updateItem(formData: FormData) {
   const minStock = parseInt(formData.get('min_stock') as string) || 5
   const packingRatio = parseInt(formData.get('packing_ratio') as string) || 1
 
+  // NEW: Packaging / CBM Data
+  const ctnQty = parseInt(formData.get('ctn_qty') as string) || 1
+  const ctnLen = parseFloat(formData.get('ctn_len') as string) || 0
+  const ctnWid = parseFloat(formData.get('ctn_wid') as string) || 0
+  const ctnHeight = parseFloat(formData.get('ctn_height') as string) || 0
+
   let variantName = [position, type].filter(Boolean).join(' - ')
   if (!variantName) variantName = 'Standard'
 
   try {
-    // 1. Check if the Product Name has changed
-    // Fetch the current product details to verify
-    const { data: currentProduct } = await supabase
-        .from('products')
-        .select('name, brand_id')
-        .eq('id', oldProductId)
-        .single();
-
+    // Check if Product Name Changed logic
+    const { data: currentProduct } = await supabase.from('products').select('name, brand_id').eq('id', oldProductId).single();
     let targetProductId = oldProductId;
 
-    // If user changed the Model Name, we must Move this item to a new/different Product ID
-    // instead of renaming the old Product ID (which would affect other items).
     if (currentProduct && currentProduct.name !== productName) {
-        console.log("Product Name Changed! Moving item to new group...");
-        
-        // Check if the NEW name already exists under the same brand
-        const { data: existingTargetProduct } = await supabase
-            .from('products')
-            .select('id')
-            .eq('brand_id', currentProduct.brand_id)
-            .ilike('name', productName)
-            .single();
-
+        const { data: existingTargetProduct } = await supabase.from('products').select('id').eq('brand_id', currentProduct.brand_id).ilike('name', productName).single();
         if (existingTargetProduct) {
-            // Attach to existing group
             targetProductId = existingTargetProduct.id;
         } else {
-            // Create a brand new group
-            const { data: newProduct, error: createError } = await supabase
-                .from('products')
-                .insert({ 
-                    brand_id: currentProduct.brand_id, 
-                    name: productName, 
-                    category: category 
-                })
-                .select('id')
-                .single();
-            
+            const { data: newProduct, error: createError } = await supabase.from('products').insert({ brand_id: currentProduct.brand_id, name: productName, category: category }).select('id').single();
             if (createError) throw new Error(createError.message);
             targetProductId = newProduct.id;
         }
     } else {
-        // Name didn't change, just update category if needed
         await supabase.from('products').update({ category }).eq('id', targetProductId);
     }
 
-    // 2. Update the Variant (and link to potentially new Product ID)
+    // Update Variant
     const { error: variantError } = await supabase.from('variants').update({
-        product_id: targetProductId, // Link to correct parent
+        product_id: targetProductId,
         item_code: itemCode,
         name: variantName,
         position: position || null,
@@ -177,7 +165,12 @@ export async function updateItem(formData: FormData) {
         price_proposal: priceProposal,
         stock_quantity: stock,
         min_stock_level: minStock,
-        packing_ratio: packingRatio
+        packing_ratio: packingRatio,
+        // NEW FIELDS
+        ctn_qty: ctnQty,
+        ctn_len: ctnLen,
+        ctn_wid: ctnWid,
+        ctn_height: ctnHeight
       }).eq('id', variantId)
 
     if (variantError) throw new Error(`Variant Update Error: ${variantError.message}`)
