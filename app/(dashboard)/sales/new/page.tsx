@@ -11,7 +11,6 @@ export default async function NewSalePage({
 }) {
   const today = new Date().toISOString().split('T')[0]
   
-  // FETCH CUSTOMERS FOR DROPDOWN
   const supabase = await createClient()
   const { data: customers } = await supabase
     .from('customers')
@@ -21,10 +20,7 @@ export default async function NewSalePage({
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <Link
-          href="/sales"
-          className="p-2 rounded-full hover:bg-gray-200 transition-colors"
-        >
+        <Link href="/sales" className="p-2 rounded-full hover:bg-gray-200 transition-colors">
           <ArrowLeft size={20} />
         </Link>
         <h1 className="text-2xl font-bold text-gray-900">Create New Sale</h1>
@@ -35,14 +31,14 @@ export default async function NewSalePage({
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">Sales Info</h2>
           
+          <div className="bg-blue-50 p-3 rounded-md text-sm text-blue-800 border border-blue-200">
+             <strong>Auto-Numbering:</strong> Invoice No (e.g. <strong>INV2602...</strong>) is auto-generated.
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">Sales Channel *</label>
-              <select
-                name="channel"
-                required
-                className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-              >
+              <select name="channel" required className="mt-1 block w-full rounded-md border border-gray-300 p-3 bg-white">
                 <option value="Walk-in">Walk-in Customer</option>
                 <option value="Shopee">Shopee</option>
                 <option value="Lazada">Lazada</option>
@@ -52,23 +48,14 @@ export default async function NewSalePage({
             </div>
             <div>
                <label className="block text-sm font-medium text-gray-700">Date</label>
-               <input
-                  name="sale_date"
-                  type="date"
-                  defaultValue={today}
-                  required
-                  className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                />
+               <input name="sale_date" type="date" defaultValue={today} required className="mt-1 block w-full rounded-md border border-gray-300 p-2" />
             </div>
           </div>
 
           <div className="bg-gray-50 p-4 rounded-md space-y-4 border border-gray-200">
             <div>
               <label className="block text-sm font-medium text-gray-700">Select Customer (Registered)</label>
-              <select 
-                name="customer_id" 
-                className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-              >
+              <select name="customer_id" className="mt-1 block w-full rounded-md border border-gray-300 p-3 bg-white">
                 <option value="">-- Guest / Unknown --</option>
                 {customers?.map(c => (
                   <option key={c.id} value={c.id}>
@@ -86,20 +73,16 @@ export default async function NewSalePage({
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Manual Guest Name</label>
-              <input
-                name="customer_name"
-                placeholder="e.g. Mr. Ali (If not registered)"
-                className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
+              <input name="customer_name" placeholder="e.g. Mr. Ali" className="mt-1 block w-full rounded-md border border-gray-300 p-2" />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Ref No (Order ID)</label>
+            <label className="block text-sm font-medium text-gray-700">Customer PO / Reference (Optional)</label>
             <input
-              name="reference_no"
-              placeholder="e.g. 230101ABC"
-              className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              name="customer_po"
+              placeholder="e.g. CUST-PO-2024-001"
+              className="mt-1 block w-full rounded-md border border-gray-300 p-2"
             />
           </div>
         </div>

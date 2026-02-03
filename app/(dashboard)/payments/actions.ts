@@ -14,24 +14,29 @@ export async function createPayment(formData: FormData) {
   const referenceNo = formData.get('reference_no') as string
   const notes = formData.get('notes') as string
 
-  // Insert Payment
+  // 1. Generate Auto-Number (RCT2602xxxxx)
+  const { data: refData, error: refError } = await supabase
+    .rpc('generate_doc_number', { prefix: 'RCT' })
+
+  if (refError) return redirect(`/payments/new?error=Number Gen Error: ${encodeURIComponent(refError.message)}`)
+  const receiptNo = refData as string
+
+  // 2. Insert Payment
   const { error } = await supabase
     .from('payments')
     .insert({
       sale_id: saleId,
+      receipt_no: receiptNo, // AUTO GENERATED
       amount,
       payment_date: paymentDate,
       method,
-      reference_no: referenceNo,
+      reference_no: referenceNo, // BANK REF
       notes
     })
 
   if (error) {
     return redirect(`/payments/new?error=${encodeURIComponent(error.message)}`)
   }
-
-  // Check if fully paid (Optional logic to update status to 'Completed' if not already)
-  // For now, we rely on the trigger to update 'paid_amount'
 
   revalidatePath('/payments')
   revalidatePath('/sales')

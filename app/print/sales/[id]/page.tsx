@@ -24,12 +24,7 @@ export default async function PrintInvoice({
     .select(`*, variants(products(name, brands(name)), name, part_number)`)
     .eq('sale_id', id)
 
-  // Fetch My Company (Default to first one for now)
-  const { data: myCompany } = await supabase
-    .from('companies')
-    .select('*')
-    .limit(1)
-    .single()
+  const { data: myCompany } = await supabase.from('companies').select('*').limit(1).single()
 
   return (
     <div className="max-w-3xl mx-auto border border-gray-200 p-8 print:border-0 print:p-0">
@@ -62,8 +57,11 @@ export default async function PrintInvoice({
         </div>
         <div className="text-right">
            <h2 className="text-xl font-bold uppercase text-gray-800">INVOICE</h2>
-           <p className="font-mono text-gray-600">#{sale.reference_no || sale.id.slice(0,8).toUpperCase()}</p>
+           <p className="font-mono text-gray-600">#{sale.reference_no}</p>
            <p className="text-sm mt-1">{sale.sale_date}</p>
+           {sale.customer_po && (
+             <p className="text-sm font-bold text-blue-600 mt-2">PO: {sale.customer_po}</p>
+           )}
         </div>
       </div>
 

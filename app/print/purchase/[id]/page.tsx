@@ -10,14 +10,9 @@ export default async function PrintPurchaseOrder({
   const { id } = await params
   const supabase = await createClient()
 
-  // Fetch Purchase + Supplier + Company Details
   const { data: purchase } = await supabase
     .from('purchases')
-    .select(`
-      *, 
-      suppliers(*),
-      companies(*)
-    `)
+    .select(`*, suppliers(*), companies(*)`)
     .eq('id', id)
     .single()
 
@@ -51,7 +46,6 @@ export default async function PrintPurchaseOrder({
              <p>{myCompany.city}</p>
              <p>Tel: {myCompany.phone}</p>
              <p>{myCompany.email}</p>
-             {/* MY TIN */}
              {myCompany.tin_number && <p className="font-mono text-xs mt-1">TIN: {myCompany.tin_number}</p>}
           </div>
         </div>
@@ -59,6 +53,9 @@ export default async function PrintPurchaseOrder({
           <h2 className="text-xl font-mono font-bold text-gray-700">{purchase.reference_no}</h2>
           <p className="text-sm text-gray-500 mt-1">Date: {purchase.purchase_date}</p>
           <p className="text-sm text-gray-500">Status: <span className="uppercase">{purchase.status}</span></p>
+          {purchase.supplier_ref && (
+             <p className="text-sm font-bold text-blue-600 mt-2">Ref: {purchase.supplier_ref}</p>
+          )}
         </div>
       </div>
 
@@ -70,12 +67,10 @@ export default async function PrintPurchaseOrder({
           {purchase.suppliers?.address && (
             <p className="whitespace-pre-line mb-2 text-gray-600">{purchase.suppliers.address}</p>
           )}
-          
           <div className="mt-2">
             <p><span className="font-semibold">Attn:</span> {purchase.suppliers?.contact_person}</p>
             <p>{purchase.suppliers?.email}</p>
             <p>{purchase.suppliers?.phone}</p>
-            {/* SUPPLIER TIN */}
             {purchase.suppliers?.tin_number && <p className="font-mono text-xs mt-1">TIN: {purchase.suppliers.tin_number}</p>}
           </div>
         </div>
@@ -122,7 +117,7 @@ export default async function PrintPurchaseOrder({
 
       <div className="mt-16 pt-8 border-t border-gray-200 text-xs text-center text-gray-400">
         <p>This is a computer-generated document. No signature is required.</p>
-        <p>{myCompany.name} - ERP System Management</p>
+        <p>{myCompany.name} - Internal ERP System</p>
       </div>
     </div>
   )

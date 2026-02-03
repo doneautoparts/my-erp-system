@@ -10,7 +10,6 @@ export default async function PrintPaymentReceipt({
   const { id } = await params
   const supabase = await createClient()
 
-  // 1. Fetch Payment + Linked Sale + Customer
   const { data: payment } = await supabase
     .from('payments')
     .select(`
@@ -27,12 +26,7 @@ export default async function PrintPaymentReceipt({
 
   if (!payment) return notFound()
 
-  // 2. Fetch My Company (Default to first one)
-  const { data: myCompany } = await supabase
-    .from('companies')
-    .select('*')
-    .limit(1)
-    .single()
+  const { data: myCompany } = await supabase.from('companies').select('*').limit(1).single()
 
   const customerName = payment.sales?.customers?.name || "Walk-in Customer"
   const customerCompany = payment.sales?.customers?.company_name || ""
@@ -53,7 +47,7 @@ export default async function PrintPaymentReceipt({
           </div>
         </div>
         <div className="text-right">
-          <h2 className="text-xl font-mono font-bold text-gray-700">RCT-{payment.id.slice(0, 6).toUpperCase()}</h2>
+          <h2 className="text-xl font-mono font-bold text-gray-700">{payment.receipt_no || 'RCT-PENDING'}</h2>
           <p className="text-sm text-gray-500 mt-1">Date: {payment.payment_date}</p>
         </div>
       </div>

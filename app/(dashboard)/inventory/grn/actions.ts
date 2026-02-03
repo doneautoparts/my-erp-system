@@ -8,7 +8,7 @@ export async function createGRNFromPO(purchaseId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // 1. Fetch PO details
+  // 1. Fetch PO
   const { data: po } = await supabase
     .from('purchases')
     .select('*, purchase_items(*)')
@@ -17,7 +17,7 @@ export async function createGRNFromPO(purchaseId: string) {
 
   if (!po) throw new Error("PO not found")
 
-  // 2. Generate Auto-Number (Database Function for GRN)
+  // 2. Generate Auto-Number (GRN2602...)
   const { data: grnNo, error: refError } = await supabase
     .rpc('generate_doc_number', { prefix: 'GRN' })
 
@@ -27,7 +27,7 @@ export async function createGRNFromPO(purchaseId: string) {
   const { data: newGrn, error: grnError } = await supabase
     .from('grn')
     .insert({
-      grn_no: grnNo as string, // Auto Generated
+      grn_no: grnNo as string, 
       purchase_id: purchaseId,
       status: 'Draft',
       created_by: user?.id
@@ -37,12 +37,12 @@ export async function createGRNFromPO(purchaseId: string) {
 
   if (grnError) throw new Error(grnError.message)
 
-  // 4. Copy Items from PO to GRN
+  // 4. Copy Items
   const grnItems = po.purchase_items.map((item: any) => ({
     grn_id: newGrn.id,
     variant_id: item.variant_id,
     order_qty: item.quantity,
-    received_qty: item.quantity, // Default to full receipt
+    received_qty: item.quantity, 
   }))
 
   const { error: itemsError } = await supabase.from('grn_items').insert(grnItems)
@@ -57,11 +57,7 @@ export async function updateGrnItem(formData: FormData) {
   const grnId = formData.get('grn_id') as string
   const receivedQty = parseInt(formData.get('received_qty') as string)
 
-  await supabase
-    .from('grn_items')
-    .update({ received_qty: receivedQty })
-    .eq('id', itemId)
-
+  await supabase.from('grn_items').update({ received_qty: receivedQty }).eq('id', itemId)
   revalidatePath(`/inventory/grn/${grnId}`)
 }
 
@@ -69,14 +65,9 @@ export async function confirmGRN(formData: FormData) {
   const supabase = await createClient()
   const grnId = formData.get('grn_id') as string
 
-  const { error } = await supabase
-    .from('grn')
-    .update({ status: 'Completed' })
-    .eq('id', grnId)
+  const { error } = await supabase.from('grn').update({ status: 'Completed' }).eq('id', grnId)
 
-  if (error) {
-    return redirect(`/inventory/grn/${grnId}?error=${encodeURIComponent(error.message)}`)
-  }
+  if (error) return redirect(`/inventory/grn/${grnId}?error=${encodeURIComponent(error.message)}`)
 
   revalidatePath('/inventory')
   redirect(`/inventory/grn/${grnId}`)
