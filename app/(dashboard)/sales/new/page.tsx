@@ -12,10 +12,8 @@ export default async function NewSalePage({
   const today = new Date().toISOString().split('T')[0]
   
   const supabase = await createClient()
-  const { data: customers } = await supabase
-    .from('customers')
-    .select('id, name, company_name')
-    .order('name')
+  const { data: customers } = await supabase.from('customers').select('id, name, company_name').order('name')
+  const { data: companies } = await supabase.from('companies').select('id, name').order('name')
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -33,6 +31,14 @@ export default async function NewSalePage({
           
           <div className="bg-blue-50 p-3 rounded-md text-sm text-blue-800 border border-blue-200">
              <strong>Auto-Numbering:</strong> Invoice No (e.g. <strong>INV2602...</strong>) is auto-generated.
+          </div>
+
+          {/* NEW COMPANY SELECTOR */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Issuing Company (Letterhead)</label>
+            <select name="company_id" required className="mt-1 block w-full rounded-md border border-gray-300 p-3 bg-gray-50">
+              {companies?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

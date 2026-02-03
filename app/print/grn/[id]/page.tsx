@@ -10,14 +10,15 @@ export default async function PrintGRN({
   const { id } = await params
   const supabase = await createClient()
 
-  // 1. Fetch GRN + PO + Supplier Info
+  // 1. Fetch GRN + PO + Supplier + COMPANY (Ensure correct linking)
   const { data: grn } = await supabase
     .from('grn')
     .select(`
       *, 
       purchases (
         reference_no, 
-        suppliers (name, address, contact_person, phone)
+        suppliers (name, address, contact_person, phone),
+        companies (*) 
       )
     `)
     .eq('id', id)
@@ -32,11 +33,11 @@ export default async function PrintGRN({
     .eq('grn_id', id)
     .order('variant_id')
 
-  // Company Info (Your Warehouse)
-  const myCompany = {
-    name: "DONE AUTO PARTS (Warehouse)",
-    address: "No. 123, Jalan Automotive 1, Industrial Park\n50000 Kuala Lumpur",
-    phone: "+60 3-1234 5678"
+  // Use the Company that issued the PO
+  const myCompany = grn.purchases?.companies || {
+    name: "Unknown Company",
+    address: "",
+    phone: ""
   }
 
   return (
@@ -51,6 +52,7 @@ export default async function PrintGRN({
              <p className="font-bold text-gray-900">{myCompany.name}</p>
              {myCompany.address}
              <p>Tel: {myCompany.phone}</p>
+             {myCompany.tin_number && <p className="font-mono text-xs mt-1">TIN: {myCompany.tin_number}</p>}
           </div>
         </div>
         <div className="text-right">

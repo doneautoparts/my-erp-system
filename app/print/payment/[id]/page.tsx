@@ -10,6 +10,7 @@ export default async function PrintPaymentReceipt({
   const { id } = await params
   const supabase = await createClient()
 
+  // 1. Fetch Payment + Linked Sale + Customer + COMPANY
   const { data: payment } = await supabase
     .from('payments')
     .select(`
@@ -18,7 +19,8 @@ export default async function PrintPaymentReceipt({
         reference_no,
         total_amount,
         paid_amount,
-        customers (name, address, company_name)
+        customers (name, address, company_name),
+        companies (*) 
       )
     `)
     .eq('id', id)
@@ -26,7 +28,12 @@ export default async function PrintPaymentReceipt({
 
   if (!payment) return notFound()
 
-  const { data: myCompany } = await supabase.from('companies').select('*').limit(1).single()
+  // Use Company from the Sale
+  const myCompany = payment.sales?.companies || {
+    name: "Unknown Company",
+    address: "",
+    phone: ""
+  }
 
   const customerName = payment.sales?.customers?.name || "Walk-in Customer"
   const customerCompany = payment.sales?.customers?.company_name || ""
@@ -40,10 +47,10 @@ export default async function PrintPaymentReceipt({
         <div>
           <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-wide">Official Receipt</h1>
           <div className="mt-2 text-sm text-gray-500 whitespace-pre-line">
-             <p className="font-bold text-gray-900">{myCompany?.name || "MY COMPANY"}</p>
-             {myCompany?.address}
-             <p>Tel: {myCompany?.phone}</p>
-             {myCompany?.tin_number && <p className="font-mono text-xs mt-1">TIN: {myCompany.tin_number}</p>}
+             <p className="font-bold text-gray-900">{myCompany.name}</p>
+             {myCompany.address}
+             <p>Tel: {myCompany.phone}</p>
+             {myCompany.tin_number && <p className="font-mono text-xs mt-1">TIN: {myCompany.tin_number}</p>}
           </div>
         </div>
         <div className="text-right">

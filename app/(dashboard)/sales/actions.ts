@@ -9,10 +9,11 @@ export async function createSale(formData: FormData) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  const companyId = formData.get('company_id') as string // <--- NEW
   const customerId = formData.get('customer_id') as string
   const customerName = formData.get('customer_name') as string
   const channel = formData.get('channel') as string
-  const customerPO = formData.get('customer_po') as string // NEW
+  const customerPO = formData.get('customer_po') as string
   const saleDate = formData.get('sale_date') as string
 
   // 1. Generate Auto-Number (INV2602xxxxx)
@@ -26,6 +27,7 @@ export async function createSale(formData: FormData) {
   const { data: newSale, error } = await supabase
     .from('sales')
     .insert({
+      company_id: companyId, // <--- SAVE COMPANY
       customer_id: customerId || null,
       customer_name: customerName,
       channel: channel,
