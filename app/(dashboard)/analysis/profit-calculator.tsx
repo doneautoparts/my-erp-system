@@ -9,6 +9,12 @@ import { useRouter } from 'next/navigation'
 const formatRM = (val: number) => 
   new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR' }).format(val)
 
+const formatUSD = (val: number) => 
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val)
+
+const formatQty = (val: number) => 
+  new Intl.NumberFormat('en-US').format(val)
+
 export default function ShipmentSimulator({ 
   variants,
   savedScenarios 
@@ -125,7 +131,9 @@ export default function ShipmentSimulator({
   const calculation = useMemo(() => {
     let totalCBM = 0
     let totalFOB_RM = 0
+    let totalFOB_USD = 0 // New Tracker
     let totalExactCartons = 0
+    let totalQty = 0 // New Tracker
 
     const rowsWithVolume = orderItems.map(item => {
       const length = item.ctn_len || 0
@@ -138,10 +146,13 @@ export default function ShipmentSimulator({
       const unitFobUSD = item.cost_usd || 0
       const unitFobRM = unitFobUSD > 0 ? unitFobUSD * exchangeRate : (item.cost_rm || 0)
       const totalItemFobRM = unitFobRM * item.orderQty
+      const totalItemFobUSD = unitFobUSD * item.orderQty // Track USD
 
       totalCBM += totalItemCBM
       totalFOB_RM += totalItemFobRM
+      totalFOB_USD += totalItemFobUSD
       totalExactCartons += exactCartons
+      totalQty += item.orderQty
 
       return { ...item, unitCBM, totalItemCBM, unitFobRM, totalItemFobRM, exactCartons }
     })
@@ -169,7 +180,16 @@ export default function ShipmentSimulator({
 
     return {
       rows: finalRows,
-      totals: { cbm: totalCBM, cartons: totalExactCartons, fobRM: totalFOB_RM, logistics: totalLogisticsLumpSum, sst: totalSST, cashOutlay: totalFOB_RM + totalLogisticsLumpSum + totalSST + (totalFOB_RM * dutyRate) }
+      totals: { 
+        qty: totalQty,
+        cbm: totalCBM, 
+        cartons: totalExactCartons, 
+        fobRM: totalFOB_RM, 
+        fobUSD: totalFOB_USD,
+        logistics: totalLogisticsLumpSum, 
+        sst: totalSST, 
+        cashOutlay: totalFOB_RM + totalLogisticsLumpSum + totalSST + (totalFOB_RM * dutyRate) 
+      }
     }
   }, [orderItems, exchangeRate, oceanLumpSum, truckingLumpSum, isFormE, manualDutyPct, consumable, license])
 
@@ -240,7 +260,7 @@ export default function ShipmentSimulator({
             </div>
         </div>
 
-        {/* PRINT ONLY HEADER (Settings Summary) */}
+        {/* PRINT ONLY HEADER */}
         <div className="hidden print-visible mb-4 border-b border-black pb-2">
             <h1 className="text-xl font-bold uppercase">Shipment Profit Analysis</h1>
             <div className="flex gap-6 text-xs text-gray-600 mt-1">
@@ -248,31 +268,58 @@ export default function ShipmentSimulator({
                 <span><strong>Ocean:</strong> RM {oceanLumpSum}</span>
                 <span><strong>Trucking:</strong> RM {truckingLumpSum}</span>
                 <span><strong>Duty:</strong> {isFormE ? '0% (Form E)' : `${manualDutyPct}%`}</span>
-                <span><strong>Overheads:</strong> RM {consumable} + {license}</span>
             </div>
         </div>
 
-        {/* KPI Header */}
-        <div className="grid grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 print:border-black">
-            <p className="text-xs font-bold text-gray-500 uppercase">Total Volume</p>
-            <h3 className="text-2xl font-bold text-indigo-600 print:text-black">{calculation.totals.cbm.toFixed(3)} m³</h3>
-            <div className="text-xs text-gray-400 mt-1 print:text-black">
-              {calculation.totals.cartons.toFixed(1)} Total Cartons
+        {/* KPI HEADER (6 COLUMNS) */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          
+          {/* 1. TOTAL QTY */}
+          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 print:border-black">
+            <p className="text-[10px] font-bold text-gray-500 uppercase">Total Qty</p>
+            <h3 className="text-lg font-bold text-gray-800 print:text-black">{formatQty(calculation.totals.qty)}</h3>
+            <div className="text-[10px] text-gray-400 mt-1">Pcs/Units</div>
+          </div>
+
+          {/* 2. TOTAL VOLUME */}
+          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 print:border-black">
+            <p className="text-[10px] font-bold text-gray-500 uppercase">Total Volume</p>
+            <h3 className="text-lg font-bold text-indigo-600 print:text-black">{calculation.totals.cbm.toFixed(3)} m³</h3>
+            <div className="text-[10px] text-gray-400 mt-1">
+              {calculation.totals.cartons.toFixed(1)} Ctns
             </div>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 print:border-black">
-            <p className="text-xs font-bold text-gray-500 uppercase">Total FOB Value</p>
-            <h3 className="text-2xl font-bold text-blue-600 print:text-black">{formatRM(calculation.totals.fobRM)}</h3>
+
+          {/* 3. TOTAL FOB */}
+          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 print:border-black">
+            <p className="text-[10px] font-bold text-gray-500 uppercase">Total FOB Value</p>
+            <h3 className="text-lg font-bold text-blue-700 print:text-black">{formatUSD(calculation.totals.fobUSD)}</h3>
+            <div className="text-[10px] font-semibold text-gray-600 mt-1">
+              {formatRM(calculation.totals.fobRM)}
+            </div>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 print:border-black">
-            <p className="text-xs font-bold text-gray-500 uppercase">Tax Payable (SST)</p>
-            <h3 className="text-2xl font-bold text-red-600 print:text-black">{formatRM(calculation.totals.sst)}</h3>
+
+          {/* 4. TOTAL LOGISTICS */}
+          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 print:border-black">
+            <p className="text-[10px] font-bold text-gray-500 uppercase">Total Logistics</p>
+            <h3 className="text-lg font-bold text-orange-600 print:text-black">{formatRM(calculation.totals.logistics)}</h3>
+            <div className="text-[10px] text-gray-400 mt-1">Ocean + Trucking</div>
           </div>
-          <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-900 text-white print:bg-white print:text-black print:border-black">
-            <p className="text-xs font-bold text-gray-400 uppercase print:text-gray-600">Total Cash Outlay</p>
+
+          {/* 5. TAX PAYABLE */}
+          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 print:border-black">
+            <p className="text-[10px] font-bold text-gray-500 uppercase">Tax Payable (SST)</p>
+            <h3 className="text-lg font-bold text-red-600 print:text-black">{formatRM(calculation.totals.sst)}</h3>
+            <div className="text-[10px] text-gray-400 mt-1">10% on Value+Logs</div>
+          </div>
+
+          {/* 6. TOTAL CASH OUTLAY */}
+          <div className="bg-gray-800 p-3 rounded-lg shadow-sm border border-gray-900 text-white print:bg-white print:text-black print:border-black">
+            <p className="text-[10px] font-bold text-gray-400 uppercase print:text-gray-600">Total Cash Outlay</p>
             <h3 className="text-xl font-bold">{formatRM(calculation.totals.cashOutlay)}</h3>
+            <div className="text-[10px] text-gray-400 mt-1 print:text-gray-500">All Inclusive</div>
           </div>
+
         </div>
 
         {/* Item Selector (Hidden on Print) */}
