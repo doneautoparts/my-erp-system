@@ -1,31 +1,35 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, Calculator, Box, TrendingUp, DollarSign } from 'lucide-react'
+import { Plus, Trash2, Calculator, Box, TrendingUp, AlertTriangle, Download, Truck, Anchor, FileCheck } from 'lucide-react'
 
 // Helper for currency formatting
 const formatRM = (val: number) => 
   new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR' }).format(val)
 
-export default function ProfitCalculator({ variants }: { variants: any[] }) {
-  // --- 1. GLOBAL VARIABLES (The "What If" Scenarios) ---
-  const [exchangeRate, setExchangeRate] = useState(4.60) // Default USD->RM
-  const [shipPct, setShipPct] = useState(6.0) // Shipping % (FOB -> CIF)
-  const [agentPct, setAgentPct] = useState(1.6) // Shipping Agent / Clearance
-  const [fwdPct, setFwdPct] = useState(1.6) // Forwarding / Transport
-  const [consumable, setConsumable] = useState(2.00) // Fixed RM per unit
-  const [license, setLicense] = useState(0.30) // Fixed RM per unit
+const formatUSD = (val: number) => 
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val)
 
-  // --- 2. SELECTION STATE ---
+export default function ShipmentSimulator({ variants }: { variants: any[] }) {
+  // --- STAGE 2: LOGISTICS & TAX SCENARIO INPUTS ---
+  const [exchangeRate, setExchangeRate] = useState(4.75)
+  const [oceanLumpSum, setOceanLumpSum] = useState(5000) // Port + Ocean Fees (RM)
+  const [truckingLumpSum, setTruckingLumpSum] = useState(800) // Forwarding + Delivery (RM)
+  const [isFormE, setIsFormE] = useState(true) // 0% Duty if ON
+  const [manualDutyPct, setManualDutyPct] = useState(10) // If Form E OFF
+  const [consumable, setConsumable] = useState(2.00) // RM per unit
+  const [license, setLicense] = useState(0.30) // RM per unit
+
+  // --- SELECTION STATE ---
   const [selectedBrand, setSelectedBrand] = useState("")
   const [selectedProduct, setSelectedProduct] = useState("")
   const [selectedVariantId, setSelectedVariantId] = useState("")
   const [qty, setQty] = useState(1)
 
-  // --- 3. ANALYSIS LIST STATE (Items user added to table) ---
-  const [analysisList, setAnalysisList] = useState<any[]>([])
+  // --- STAGE 1: ORDER DRAFT STATE ---
+  const [orderItems, setOrderItems] = useState<any[]>([])
 
-  // --- FILTER LOGIC (Same as Purchasing) ---
+  // --- FILTERING LOGIC ---
   const brands = useMemo(() => {
     const unique = new Set(variants.map(v => v.products?.brands?.name).filter(Boolean))
     return Array.from(unique).sort()
@@ -45,233 +49,380 @@ export default function ProfitCalculator({ variants }: { variants: any[] }) {
       .sort((a, b) => (a.item_code || '').localeCompare(b.item_code || ''))
   }, [variants, selectedBrand, selectedProduct])
 
-  // --- ADD ITEM TO LIST ---
+  // --- HANDLERS ---
   const handleAddItem = () => {
     const item = variants.find(v => v.id === selectedVariantId)
     if (!item) return
-
-    // Add to list (Create a unique ID for the row in case duplicate items added)
-    setAnalysisList(prev => [...prev, { ...item, analysisId: Math.random(), orderQty: qty }])
-    
-    // Reset selection slightly for speed
+    // Add new line item
+    setOrderItems(prev => [...prev, { 
+      ...item, 
+      uniqueId: Math.random(), 
+      orderQty: qty,
+      targetPrice: item.price_proposal || 0 // Default to proposal price
+    }])
     setQty(1)
   }
 
-  // --- REMOVE ITEM ---
   const handleRemove = (id: number) => {
-    setAnalysisList(prev => prev.filter(item => item.analysisId !== id))
+    setOrderItems(prev => prev.filter(item => item.uniqueId !== id))
   }
 
-  // --- CALCULATIONS ---
-  const calculatedRows = analysisList.map(item => {
-    // 1. Costs
-    const baseCostUSD = item.cost_usd || 0
-    const baseCostRM = baseCostUSD > 0 ? (baseCostUSD * exchangeRate) : (item.cost_rm || 0) // Fallback to RM cost if no USD
-    
-    // 2. Variable Costs (Percentages)
-    const shipCost = baseCostRM * (shipPct / 100)
-    const agentCost = baseCostRM * (agentPct / 100)
-    const fwdCost = baseCostRM * (fwdPct / 100)
-    
-    // 3. Landed Cost
-    const landedCostOne = baseCostRM + shipCost + agentCost + fwdCost + consumable + license
-    
-    // 4. Sales & Profit
-    const sellPrice = item.price_proposal || 0 // Objective: Compare against Proposal Price
-    const grossProfitOne = sellPrice - landedCostOne
-    const margin = sellPrice > 0 ? (grossProfitOne / sellPrice) * 100 : 0
+  const updateOrderRow = (id: number, field: string, value: number) => {
+    setOrderItems(prev => prev.map(item => 
+      item.uniqueId === id ? { ...item, [field]: value } : item
+    ))
+  }
 
-    // 5. CBM
-    // Dims are in CM, need Meters. CBM = (L*W*H / 1,000,000)
-    // Adjust for Packing Ratio (e.g. 10 pcs in 1 carton)
-    const ratio = item.packing_ratio || 1
-    const cartons = Math.ceil(item.orderQty / ratio)
-    const singleCtnVol = (item.ctn_len * item.ctn_wid * item.ctn_height) / 1000000
-    const totalCBM = singleCtnVol * cartons
+  // --- ENGINE: CALCULATIONS ---
+  const calculation = useMemo(() => {
+    // 1. Calculate Volume & FOB Totals
+    let totalCBM = 0
+    let totalFOB_RM = 0
+
+    const rowsWithVolume = orderItems.map(item => {
+      // Unit CBM logic
+      const length = item.ctn_len || 0
+      const width = item.ctn_wid || 0
+      const height = item.ctn_height || 0
+      const pcsPerCtn = item.ctn_qty || 1
+      
+      // CBM per piece = (L*W*H / 1,000,000) / PcsPerCtn
+      const unitCBM = ((length * width * height) / 1000000) / pcsPerCtn
+      const totalItemCBM = unitCBM * item.orderQty
+      
+      const unitFobUSD = item.cost_usd || 0
+      const unitFobRM = unitFobUSD > 0 ? unitFobUSD * exchangeRate : (item.cost_rm || 0)
+      const totalItemFobRM = unitFobRM * item.orderQty
+
+      totalCBM += totalItemCBM
+      totalFOB_RM += totalItemFobRM
+
+      return { ...item, unitCBM, totalItemCBM, unitFobRM, totalItemFobRM }
+    })
+
+    // 2. Logistics & Tax Allocation
+    const totalLogisticsLumpSum = oceanLumpSum + truckingLumpSum
+    
+    // Tax Logic: (Total FOB + Ocean) * 10% -> User Formula
+    // Note: Usually Tax is on Value, not CBM. But we follow the cashflow requirement.
+    const taxBase = totalFOB_RM + oceanLumpSum
+    const totalSST = taxBase * 0.10 
+    
+    // Duty Logic
+    const dutyRate = isFormE ? 0 : (manualDutyPct / 100)
+
+    // 3. Final Allocation per Row
+    const finalRows = rowsWithVolume.map(item => {
+      // A. Logistics Allocation based on CBM Weightage
+      // Formula: Unit CBM * (Total Logistics / Total Shipment CBM)
+      const cbmShare = totalCBM > 0 ? (item.unitCBM / totalCBM) : 0
+      const allocatedLogisticsPerUnit = cbmShare * totalLogisticsLumpSum
+
+      // B. Tax Allocation (Value Based usually, but let's stick to standard pro-rating)
+      // We allocate the total SST back to units based on their FOB value share
+      const valueShare = totalFOB_RM > 0 ? (item.totalItemFobRM / totalFOB_RM) : 0
+      const allocatedSSTPerUnit = (valueShare * totalSST) / item.orderQty
+
+      // C. Duty
+      const unitDuty = item.unitFobRM * dutyRate
+
+      // D. Landed Cost
+      const landedCost = item.unitFobRM + allocatedLogisticsPerUnit + unitDuty + allocatedSSTPerUnit + consumable + license
+
+      // E. Profitability
+      const grossProfit = item.targetPrice - landedCost
+      const margin = item.targetPrice > 0 ? (grossProfit / item.targetPrice) * 100 : 0
+      const roi = landedCost > 0 ? (grossProfit / landedCost) * 100 : 0
+
+      return {
+        ...item,
+        allocatedLogisticsPerUnit,
+        allocatedSSTPerUnit,
+        landedCost,
+        grossProfit,
+        margin,
+        roi,
+        isLowMargin: margin < 20
+      }
+    })
 
     return {
-      ...item,
-      baseCostRM,
-      shipCost,
-      agentCost,
-      fwdCost,
-      landedCostOne,
-      sellPrice,
-      grossProfitOne,
-      margin,
-      cartons,
-      totalCBM,
-      totalProfit: grossProfitOne * item.orderQty
+      rows: finalRows,
+      totals: {
+        cbm: totalCBM,
+        fobRM: totalFOB_RM,
+        logistics: totalLogisticsLumpSum,
+        sst: totalSST,
+        cashOutlay: totalFOB_RM + totalLogisticsLumpSum + totalSST + (totalFOB_RM * dutyRate)
+      }
     }
-  })
+  }, [orderItems, exchangeRate, oceanLumpSum, truckingLumpSum, isFormE, manualDutyPct, consumable, license])
 
-  // Grand Totals
-  const grandTotalProfit = calculatedRows.reduce((sum, item) => sum + item.totalProfit, 0)
-  const grandTotalCBM = calculatedRows.reduce((sum, item) => sum + item.totalCBM, 0)
-  const grandTotalCartons = calculatedRows.reduce((sum, item) => sum + item.cartons, 0)
+  // --- EXPORT TO CSV ---
+  const exportToCSV = () => {
+    const headers = ["Item Code", "Product", "Qty", "FOB(RM)", "Landed Cost", "Sell Price", "Profit", "Margin %", "CBM"]
+    const csvRows = [
+      headers.join(','),
+      ...calculation.rows.map(r => [
+        r.item_code, 
+        `"${r.name}"`, 
+        r.orderQty, 
+        r.unitFobRM.toFixed(2), 
+        r.landedCost.toFixed(2), 
+        r.targetPrice.toFixed(2), 
+        r.grossProfit.toFixed(2), 
+        r.margin.toFixed(2),
+        r.totalItemCBM.toFixed(4)
+      ].join(','))
+    ]
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `shipment_analysis_${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+  }
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col lg:flex-row gap-6 h-full min-h-screen">
       
-      {/* 1. CONTROL PANEL (VARIABLES) */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-          <Calculator size={20} className="text-blue-600"/> Costing Variables
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          <div>
-            <label className="text-xs font-bold text-gray-500 uppercase">USD Rate</label>
-            <input type="number" value={exchangeRate} onChange={e => setExchangeRate(parseFloat(e.target.value))} className="w-full border rounded p-2 text-blue-700 font-bold" step="0.01" />
+      {/* --- LEFT: MAIN WORKSPACE (Order Draft) --- */}
+      <div className="flex-1 space-y-6">
+        
+        {/* KPI Header */}
+        <div className="grid grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <p className="text-xs font-bold text-gray-500 uppercase">Total Volume</p>
+            <h3 className="text-2xl font-bold text-indigo-600">{calculation.totals.cbm.toFixed(3)} m³</h3>
+            <div className="text-xs text-gray-400 mt-1">
+              <span className={calculation.totals.cbm > 33 ? 'text-red-500' : 'text-green-500'}>
+                {((calculation.totals.cbm / 33) * 100).toFixed(0)}%
+              </span> of 20ft Container
+            </div>
           </div>
-          <div>
-            <label className="text-xs font-bold text-gray-500 uppercase">Shipping %</label>
-            <input type="number" value={shipPct} onChange={e => setShipPct(parseFloat(e.target.value))} className="w-full border rounded p-2" step="0.1" />
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <p className="text-xs font-bold text-gray-500 uppercase">Total FOB Value</p>
+            <h3 className="text-2xl font-bold text-blue-600">{formatRM(calculation.totals.fobRM)}</h3>
           </div>
-          <div>
-            <label className="text-xs font-bold text-gray-500 uppercase">Agent %</label>
-            <input type="number" value={agentPct} onChange={e => setAgentPct(parseFloat(e.target.value))} className="w-full border rounded p-2" step="0.1" />
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <p className="text-xs font-bold text-gray-500 uppercase">Tax Payable (SST)</p>
+            <h3 className="text-2xl font-bold text-red-600">{formatRM(calculation.totals.sst)}</h3>
           </div>
-          <div>
-            <label className="text-xs font-bold text-gray-500 uppercase">Forwarding %</label>
-            <input type="number" value={fwdPct} onChange={e => setFwdPct(parseFloat(e.target.value))} className="w-full border rounded p-2" step="0.1" />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-gray-500 uppercase">Consumable (RM)</label>
-            <input type="number" value={consumable} onChange={e => setConsumable(parseFloat(e.target.value))} className="w-full border rounded p-2" step="0.1" />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-gray-500 uppercase">License (RM)</label>
-            <input type="number" value={license} onChange={e => setLicense(parseFloat(e.target.value))} className="w-full border rounded p-2" step="0.01" />
+          <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-900 text-white">
+            <p className="text-xs font-bold text-gray-400 uppercase">Total Cash Outlay</p>
+            <h3 className="text-xl font-bold">{formatRM(calculation.totals.cashOutlay)}</h3>
+            <p className="text-xs text-gray-400 mt-1">Goods + Logs + Tax</p>
           </div>
         </div>
-      </div>
 
-      {/* 2. ITEM SELECTOR */}
-      <div className="bg-blue-50 p-6 rounded-xl border border-blue-100">
-        <h3 className="text-md font-bold text-blue-900 mb-4">Add Item to Simulate</h3>
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-          
-          <div className="md:col-span-3">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Brand</label>
-            <select className="w-full rounded p-2 border" value={selectedBrand} onChange={e => { setSelectedBrand(e.target.value); setSelectedProduct(""); }}>
-              <option value="">-- Brand --</option>
-              {brands.map((b: any) => <option key={b} value={b}>{b}</option>)}
-            </select>
-          </div>
+        {/* Item Selector */}
+        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex gap-2 items-end">
+           <div className="flex-1 grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Brand</label>
+                <select className="w-full text-sm border rounded p-2" value={selectedBrand} onChange={e => { setSelectedBrand(e.target.value); setSelectedProduct(""); }}>
+                  <option value="">-- Brand --</option>
+                  {brands.map((b: any) => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Model</label>
+                <select className="w-full text-sm border rounded p-2" value={selectedProduct} onChange={e => { setSelectedProduct(e.target.value); setSelectedVariantId(""); }} disabled={!selectedBrand}>
+                  <option value="">-- Model --</option>
+                  {products.map((p: any) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Item</label>
+                <select className="w-full text-sm border rounded p-2" value={selectedVariantId} onChange={e => setSelectedVariantId(e.target.value)} disabled={!selectedProduct}>
+                  <option value="">-- Item --</option>
+                  {filteredVariants.map((v: any) => <option key={v.id} value={v.id}>[{v.item_code}] {v.name}</option>)}
+                </select>
+              </div>
+           </div>
+           <div className="w-24">
+              <label className="text-xs text-gray-500 block mb-1">Qty</label>
+              <input type="number" className="w-full text-sm border rounded p-2" value={qty} onChange={e => setQty(parseInt(e.target.value) || 1)} />
+           </div>
+           <button onClick={handleAddItem} disabled={!selectedVariantId} className="bg-blue-600 text-white p-2 rounded hover:bg-blue-500">
+             <Plus size={20} />
+           </button>
+        </div>
 
-          <div className="md:col-span-3">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Model</label>
-            <select className="w-full rounded p-2 border" value={selectedProduct} onChange={e => { setSelectedProduct(e.target.value); setSelectedVariantId(""); }} disabled={!selectedBrand}>
-              <option value="">-- Model --</option>
-              {products.map((p: any) => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-
-          <div className="md:col-span-4">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Item</label>
-            <select className="w-full rounded p-2 border" value={selectedVariantId} onChange={e => setSelectedVariantId(e.target.value)} disabled={!selectedProduct}>
-              <option value="">-- Item --</option>
-              {filteredVariants.map((v: any) => <option key={v.id} value={v.id}>[{v.item_code}] {v.name}</option>)}
-            </select>
-          </div>
-
-          <div className="md:col-span-1">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Qty</label>
-            <input type="number" className="w-full rounded p-2 border" value={qty} onChange={e => setQty(parseInt(e.target.value) || 1)} min="1" />
-          </div>
-
-          <div className="md:col-span-1">
-            <button onClick={handleAddItem} disabled={!selectedVariantId} className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-500 disabled:opacity-50">
-              <Plus size={20} className="mx-auto"/>
+        {/* Main Table */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="flex justify-between items-center p-3 border-b bg-gray-50">
+            <h3 className="font-bold text-gray-700">Shipment Manifest</h3>
+            <button onClick={exportToCSV} className="flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-900">
+              <Download size={14} /> Export Excel
             </button>
           </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-xs">
+              <thead className="bg-gray-100 text-gray-600 uppercase font-bold">
+                <tr>
+                  <th className="px-3 py-2 text-left">Item Details</th>
+                  <th className="px-3 py-2 text-center bg-yellow-50">Order Qty</th>
+                  <th className="px-3 py-2 text-right">FOB (RM)</th>
+                  <th className="px-3 py-2 text-right">Logistics</th>
+                  <th className="px-3 py-2 text-right bg-blue-50">Landed Cost</th>
+                  <th className="px-3 py-2 text-center bg-green-50">Target Price</th>
+                  <th className="px-3 py-2 text-right bg-green-50">Gross Profit</th>
+                  <th className="px-3 py-2 text-right bg-green-50">Margin</th>
+                  <th className="px-3 py-2 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {calculation.rows.map((row) => (
+                  <tr key={row.uniqueId} className={`hover:bg-gray-50 ${row.isLowMargin ? 'bg-red-50' : ''}`}>
+                    <td className="px-3 py-2">
+                      <div className="font-bold text-gray-900">{row.item_code}</div>
+                      <div className="text-gray-500 truncate max-w-[200px]">{row.name}</div>
+                      <div className="text-[10px] text-gray-400 mt-1">
+                        {row.unitCBM.toFixed(4)} m³ | {row.allocatedSSTPerUnit.toFixed(2)} SST
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-center bg-yellow-50">
+                      <input 
+                        type="number" 
+                        value={row.orderQty} 
+                        onChange={(e) => updateOrderRow(row.uniqueId, 'orderQty', parseInt(e.target.value))}
+                        className="w-16 text-center border rounded p-1 bg-white"
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {row.unitFobRM.toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2 text-right text-gray-500">
+                      {row.allocatedLogisticsPerUnit.toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-bold text-blue-700 bg-blue-50">
+                      {row.landedCost.toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2 text-center bg-green-50">
+                      <input 
+                        type="number" 
+                        value={row.targetPrice} 
+                        onChange={(e) => updateOrderRow(row.uniqueId, 'targetPrice', parseFloat(e.target.value))}
+                        className="w-20 text-right border rounded p-1 bg-white"
+                        step="0.01"
+                      />
+                    </td>
+                    <td className={`px-3 py-2 text-right font-bold bg-green-50 ${row.grossProfit > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                      {row.grossProfit.toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-bold bg-green-50">
+                      <span className={row.isLowMargin ? 'text-red-600' : 'text-green-600'}>
+                        {row.margin.toFixed(1)}%
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <button onClick={() => handleRemove(row.uniqueId)} className="text-red-400 hover:text-red-600">
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      {/* 3. RESULTS TABLE */}
-      <div className="bg-white shadow-sm overflow-x-auto rounded-lg border border-gray-200">
-        <table className="min-w-full text-xs md:text-sm">
-          <thead className="bg-gray-800 text-white">
-            <tr>
-              <th className="px-4 py-3 text-left">Item Details</th>
-              <th className="px-4 py-3 text-center">Qty</th>
-              <th className="px-4 py-3 text-right bg-gray-700">Base Cost (RM)</th>
-              <th className="px-4 py-3 text-right">Landed Cost</th>
-              <th className="px-4 py-3 text-right">Prop. Price</th>
-              <th className="px-4 py-3 text-right bg-green-900">Profit / Unit</th>
-              <th className="px-4 py-3 text-right">Total Profit</th>
-              <th className="px-4 py-3 text-center">Cartons</th>
-              <th className="px-4 py-3 text-right">CBM</th>
-              <th className="px-4 py-3 text-center">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {calculatedRows.map((row) => (
-              <tr key={row.analysisId} className="hover:bg-gray-50">
-                <td className="px-4 py-3">
-                  <div className="font-bold text-gray-900">{row.item_code}</div>
-                  <div className="text-gray-500">{row.products?.name} - {row.name}</div>
-                </td>
-                <td className="px-4 py-3 text-center">{row.orderQty}</td>
-                
-                {/* Cost Breakdown Tooltip on Hover */}
-                <td className="px-4 py-3 text-right font-mono bg-gray-50 text-gray-600" title={`USD: ${row.cost_usd}`}>
-                  {row.baseCostRM.toFixed(2)}
-                </td>
-                
-                <td className="px-4 py-3 text-right font-bold text-red-600" title={`Ship: ${row.shipCost.toFixed(2)} | Agent: ${row.agentCost.toFixed(2)} | Fwd: ${row.fwdCost.toFixed(2)} | Fixed: ${(consumable + license).toFixed(2)}`}>
-                  {row.landedCostOne.toFixed(2)}
-                </td>
-                
-                <td className="px-4 py-3 text-right text-blue-600 font-medium">
-                  {row.sellPrice.toFixed(2)}
-                </td>
-                
-                <td className={`px-4 py-3 text-right font-bold ${row.grossProfitOne > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {row.grossProfitOne.toFixed(2)}
-                  <span className="block text-xs font-normal text-gray-400">({row.margin.toFixed(1)}%)</span>
-                </td>
+      {/* --- RIGHT: LOGISTICS SIDEBAR --- */}
+      <div className="w-full lg:w-80 bg-white border-l border-gray-200 p-6 flex flex-col gap-6 overflow-y-auto">
+        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+          <Truck size={20} /> Logistics & Tax
+        </h2>
 
-                <td className="px-4 py-3 text-right font-bold text-green-800">
-                  {row.totalProfit.toFixed(2)}
-                </td>
+        <div className="space-y-4">
+          <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
+            <label className="text-xs font-bold text-blue-800 uppercase block mb-1">Exchange Rate (USD)</label>
+            <input 
+              type="number" 
+              value={exchangeRate} 
+              onChange={e => setExchangeRate(parseFloat(e.target.value))} 
+              className="w-full text-right font-mono font-bold border-blue-300 rounded p-2 text-lg" 
+              step="0.01" 
+            />
+          </div>
 
-                <td className="px-4 py-3 text-center text-gray-500">
-                  {row.cartons}
-                </td>
-                <td className="px-4 py-3 text-right text-purple-600 font-medium">
-                  {row.totalCBM.toFixed(3)}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <button onClick={() => handleRemove(row.analysisId)} className="text-red-400 hover:text-red-600">
-                    <Trash2 size={16} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {calculatedRows.length === 0 && (
-              <tr>
-                <td colSpan={10} className="text-center py-8 text-gray-400">Add items to simulate costs and profit.</td>
-              </tr>
+          <div>
+            <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Ocean & Port (RM)</label>
+            <div className="relative">
+              <Anchor size={16} className="absolute left-3 top-3 text-gray-400" />
+              <input 
+                type="number" 
+                value={oceanLumpSum} 
+                onChange={e => setOceanLumpSum(parseFloat(e.target.value))} 
+                className="w-full pl-9 border rounded p-2" 
+              />
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">Incl. Port codes, K1, EDI</p>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Fwd & Trucking (RM)</label>
+            <div className="relative">
+              <Truck size={16} className="absolute left-3 top-3 text-gray-400" />
+              <input 
+                type="number" 
+                value={truckingLumpSum} 
+                onChange={e => setTruckingLumpSum(parseFloat(e.target.value))} 
+                className="w-full pl-9 border rounded p-2" 
+              />
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">To Warehouse (Bangi)</p>
+          </div>
+
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-gray-500 uppercase">Form E (0% Duty)</label>
+              <input 
+                type="checkbox" 
+                checked={isFormE} 
+                onChange={e => setIsFormE(e.target.checked)} 
+                className="h-5 w-5 text-blue-600 rounded" 
+              />
+            </div>
+            {!isFormE && (
+              <div className="mb-2">
+                <label className="text-xs text-gray-400">MFN Duty %</label>
+                <input 
+                  type="number" 
+                  value={manualDutyPct} 
+                  onChange={e => setManualDutyPct(parseFloat(e.target.value))} 
+                  className="w-full border rounded p-1 text-sm" 
+                />
+              </div>
             )}
-          </tbody>
-          {calculatedRows.length > 0 && (
-            <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-300">
-              <tr>
-                <td colSpan={6} className="px-4 py-3 text-right uppercase">Grand Totals:</td>
-                <td className="px-4 py-3 text-right text-green-700 text-lg">{formatRM(grandTotalProfit)}</td>
-                <td className="px-4 py-3 text-center">{grandTotalCartons} Box</td>
-                <td className="px-4 py-3 text-right text-purple-700">{grandTotalCBM.toFixed(3)} m³</td>
-                <td></td>
-              </tr>
-            </tfoot>
-          )}
-        </table>
+          </div>
+
+          <div className="border-t pt-4 grid grid-cols-2 gap-2">
+             <div>
+               <label className="text-[10px] font-bold text-gray-500 uppercase">Consumable</label>
+               <input type="number" value={consumable} onChange={e => setConsumable(parseFloat(e.target.value))} className="w-full border rounded p-1 text-sm" />
+             </div>
+             <div>
+               <label className="text-[10px] font-bold text-gray-500 uppercase">License</label>
+               <input type="number" value={license} onChange={e => setLicense(parseFloat(e.target.value))} className="w-full border rounded p-1 text-sm" />
+             </div>
+          </div>
+
+          <div className="bg-orange-50 p-3 rounded border border-orange-200 mt-4">
+             <div className="flex items-start gap-2">
+               <AlertTriangle size={16} className="text-orange-600 mt-0.5" />
+               <p className="text-xs text-orange-800">
+                 <strong>Allocation Rule:</strong><br/>
+                 Logistics are allocated based on <u>CBM (Volume)</u>.<br/>
+                 Tax & Duty are allocated based on <u>Value</u>.
+               </p>
+             </div>
+          </div>
+
+        </div>
       </div>
 
-      <div className="p-4 bg-yellow-50 text-yellow-800 text-xs rounded-md border border-yellow-200">
-        <strong>Note:</strong> Landed Cost = Base RM + Shipping ({shipPct}%) + Agent ({agentPct}%) + Fwd ({fwdPct}%) + Consumable ({consumable}) + License ({license}).
-      </div>
     </div>
   )
 }
