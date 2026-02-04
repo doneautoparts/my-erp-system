@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, Calculator, Box, TrendingUp, AlertTriangle, Download, Truck, Anchor, FileCheck } from 'lucide-react'
+import { Plus, Trash2, Calculator, Box, TrendingUp, AlertTriangle, Download, Truck, Anchor, FileCheck, Package } from 'lucide-react'
 
 // Helper for currency formatting
 const formatRM = (val: number) => 
@@ -11,14 +11,14 @@ const formatUSD = (val: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val)
 
 export default function ShipmentSimulator({ variants }: { variants: any[] }) {
-  // --- STAGE 2: LOGISTICS & TAX SCENARIO INPUTS ---
+  // --- LOGISTICS & TAX SCENARIO INPUTS ---
   const [exchangeRate, setExchangeRate] = useState(4.75)
-  const [oceanLumpSum, setOceanLumpSum] = useState(5000) // Port + Ocean Fees (RM)
-  const [truckingLumpSum, setTruckingLumpSum] = useState(800) // Forwarding + Delivery (RM)
-  const [isFormE, setIsFormE] = useState(true) // 0% Duty if ON
-  const [manualDutyPct, setManualDutyPct] = useState(10) // If Form E OFF
-  const [consumable, setConsumable] = useState(2.00) // RM per unit
-  const [license, setLicense] = useState(0.30) // RM per unit
+  const [oceanLumpSum, setOceanLumpSum] = useState(5000) 
+  const [truckingLumpSum, setTruckingLumpSum] = useState(800) 
+  const [isFormE, setIsFormE] = useState(true) 
+  const [manualDutyPct, setManualDutyPct] = useState(10) 
+  const [consumable, setConsumable] = useState(2.00) 
+  const [license, setLicense] = useState(0.30) 
 
   // --- SELECTION STATE ---
   const [selectedBrand, setSelectedBrand] = useState("")
@@ -26,7 +26,7 @@ export default function ShipmentSimulator({ variants }: { variants: any[] }) {
   const [selectedVariantId, setSelectedVariantId] = useState("")
   const [qty, setQty] = useState(1)
 
-  // --- STAGE 1: ORDER DRAFT STATE ---
+  // --- ORDER DRAFT STATE ---
   const [orderItems, setOrderItems] = useState<any[]>([])
 
   // --- FILTERING LOGIC ---
@@ -53,12 +53,11 @@ export default function ShipmentSimulator({ variants }: { variants: any[] }) {
   const handleAddItem = () => {
     const item = variants.find(v => v.id === selectedVariantId)
     if (!item) return
-    // Add new line item
     setOrderItems(prev => [...prev, { 
       ...item, 
       uniqueId: Math.random(), 
       orderQty: qty,
-      targetPrice: item.price_proposal || 0 // Default to proposal price
+      targetPrice: item.price_proposal || 0 
     }])
     setQty(1)
   }
@@ -75,19 +74,26 @@ export default function ShipmentSimulator({ variants }: { variants: any[] }) {
 
   // --- ENGINE: CALCULATIONS ---
   const calculation = useMemo(() => {
-    // 1. Calculate Volume & FOB Totals
     let totalCBM = 0
     let totalFOB_RM = 0
+    let totalExactCartons = 0
 
     const rowsWithVolume = orderItems.map(item => {
-      // Unit CBM logic
+      // Carton Logic
       const length = item.ctn_len || 0
       const width = item.ctn_wid || 0
       const height = item.ctn_height || 0
       const pcsPerCtn = item.ctn_qty || 1
       
+      // Calculate Exact Cartons (e.g. 2.5 boxes)
+      const exactCartons = item.orderQty / pcsPerCtn
+
       // CBM per piece = (L*W*H / 1,000,000) / PcsPerCtn
-      const unitCBM = ((length * width * height) / 1000000) / pcsPerCtn
+      // If dimensions are 0, CBM is 0
+      const unitCBM = (length * width * height > 0) 
+        ? ((length * width * height) / 1000000) / pcsPerCtn
+        : 0
+      
       const totalItemCBM = unitCBM * item.orderQty
       
       const unitFobUSD = item.cost_usd || 0
@@ -96,43 +102,32 @@ export default function ShipmentSimulator({ variants }: { variants: any[] }) {
 
       totalCBM += totalItemCBM
       totalFOB_RM += totalItemFobRM
+      totalExactCartons += exactCartons
 
-      return { ...item, unitCBM, totalItemCBM, unitFobRM, totalItemFobRM }
+      return { ...item, unitCBM, totalItemCBM, unitFobRM, totalItemFobRM, exactCartons }
     })
 
-    // 2. Logistics & Tax Allocation
     const totalLogisticsLumpSum = oceanLumpSum + truckingLumpSum
-    
-    // Tax Logic: (Total FOB + Ocean) * 10% -> User Formula
-    // Note: Usually Tax is on Value, not CBM. But we follow the cashflow requirement.
     const taxBase = totalFOB_RM + oceanLumpSum
     const totalSST = taxBase * 0.10 
-    
-    // Duty Logic
     const dutyRate = isFormE ? 0 : (manualDutyPct / 100)
 
-    // 3. Final Allocation per Row
     const finalRows = rowsWithVolume.map(item => {
-      // A. Logistics Allocation based on CBM Weightage
-      // Formula: Unit CBM * (Total Logistics / Total Shipment CBM)
-      const cbmShare = totalCBM > 0 ? (item.unitCBM / totalCBM) : 0
-      const allocatedLogisticsPerUnit = cbmShare * totalLogisticsLumpSum
+      // Allocation
+      const cbmShare = totalCBM > 0 ? (item.totalItemCBM / totalCBM) : 0
+      
+      // Distribute Lump Sum based on Total Item CBM vs Total Shipment CBM
+      const allocatedLogisticsTotal = cbmShare * totalLogisticsLumpSum
+      const allocatedLogisticsPerUnit = item.orderQty > 0 ? (allocatedLogisticsTotal / item.orderQty) : 0
 
-      // B. Tax Allocation (Value Based usually, but let's stick to standard pro-rating)
-      // We allocate the total SST back to units based on their FOB value share
       const valueShare = totalFOB_RM > 0 ? (item.totalItemFobRM / totalFOB_RM) : 0
-      const allocatedSSTPerUnit = (valueShare * totalSST) / item.orderQty
+      const allocatedSSTPerUnit = item.orderQty > 0 ? (valueShare * totalSST) / item.orderQty : 0
 
-      // C. Duty
       const unitDuty = item.unitFobRM * dutyRate
-
-      // D. Landed Cost
       const landedCost = item.unitFobRM + allocatedLogisticsPerUnit + unitDuty + allocatedSSTPerUnit + consumable + license
 
-      // E. Profitability
       const grossProfit = item.targetPrice - landedCost
       const margin = item.targetPrice > 0 ? (grossProfit / item.targetPrice) * 100 : 0
-      const roi = landedCost > 0 ? (grossProfit / landedCost) * 100 : 0
 
       return {
         ...item,
@@ -141,7 +136,6 @@ export default function ShipmentSimulator({ variants }: { variants: any[] }) {
         landedCost,
         grossProfit,
         margin,
-        roi,
         isLowMargin: margin < 20
       }
     })
@@ -150,6 +144,7 @@ export default function ShipmentSimulator({ variants }: { variants: any[] }) {
       rows: finalRows,
       totals: {
         cbm: totalCBM,
+        cartons: totalExactCartons,
         fobRM: totalFOB_RM,
         logistics: totalLogisticsLumpSum,
         sst: totalSST,
@@ -160,19 +155,20 @@ export default function ShipmentSimulator({ variants }: { variants: any[] }) {
 
   // --- EXPORT TO CSV ---
   const exportToCSV = () => {
-    const headers = ["Item Code", "Product", "Qty", "FOB(RM)", "Landed Cost", "Sell Price", "Profit", "Margin %", "CBM"]
+    const headers = ["Item Code", "Product", "Qty", "Cartons", "Total CBM", "FOB(RM)", "Landed Cost", "Sell Price", "Profit", "Margin %"]
     const csvRows = [
       headers.join(','),
       ...calculation.rows.map(r => [
         r.item_code, 
         `"${r.name}"`, 
-        r.orderQty, 
+        r.orderQty,
+        r.exactCartons.toFixed(2),
+        r.totalItemCBM.toFixed(4),
         r.unitFobRM.toFixed(2), 
         r.landedCost.toFixed(2), 
         r.targetPrice.toFixed(2), 
         r.grossProfit.toFixed(2), 
-        r.margin.toFixed(2),
-        r.totalItemCBM.toFixed(4)
+        r.margin.toFixed(2)
       ].join(','))
     ]
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' })
@@ -186,18 +182,16 @@ export default function ShipmentSimulator({ variants }: { variants: any[] }) {
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-full min-h-screen">
       
-      {/* --- LEFT: MAIN WORKSPACE (Order Draft) --- */}
+      {/* --- LEFT: MAIN WORKSPACE --- */}
       <div className="flex-1 space-y-6">
         
         {/* KPI Header */}
         <div className="grid grid-cols-4 gap-4">
           <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-            <p className="text-xs font-bold text-gray-500 uppercase">Total Volume</p>
+            <p className="text-xs font-bold text-gray-500 uppercase">Volume (CBM)</p>
             <h3 className="text-2xl font-bold text-indigo-600">{calculation.totals.cbm.toFixed(3)} m³</h3>
             <div className="text-xs text-gray-400 mt-1">
-              <span className={calculation.totals.cbm > 33 ? 'text-red-500' : 'text-green-500'}>
-                {((calculation.totals.cbm / 33) * 100).toFixed(0)}%
-              </span> of 20ft Container
+              {calculation.totals.cartons.toFixed(1)} Total Cartons
             </div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
@@ -263,8 +257,12 @@ export default function ShipmentSimulator({ variants }: { variants: any[] }) {
                 <tr>
                   <th className="px-3 py-2 text-left">Item Details</th>
                   <th className="px-3 py-2 text-center bg-yellow-50">Order Qty</th>
+                  
+                  {/* NEW COLUMNS */}
+                  <th className="px-3 py-2 text-center bg-purple-50">Cartons</th>
+                  <th className="px-3 py-2 text-right bg-purple-50">Row CBM</th>
+
                   <th className="px-3 py-2 text-right">FOB (RM)</th>
-                  <th className="px-3 py-2 text-right">Logistics</th>
                   <th className="px-3 py-2 text-right bg-blue-50">Landed Cost</th>
                   <th className="px-3 py-2 text-center bg-green-50">Target Price</th>
                   <th className="px-3 py-2 text-right bg-green-50">Gross Profit</th>
@@ -278,9 +276,6 @@ export default function ShipmentSimulator({ variants }: { variants: any[] }) {
                     <td className="px-3 py-2">
                       <div className="font-bold text-gray-900">{row.item_code}</div>
                       <div className="text-gray-500 truncate max-w-[200px]">{row.name}</div>
-                      <div className="text-[10px] text-gray-400 mt-1">
-                        {row.unitCBM.toFixed(4)} m³ | {row.allocatedSSTPerUnit.toFixed(2)} SST
-                      </div>
                     </td>
                     <td className="px-3 py-2 text-center bg-yellow-50">
                       <input 
@@ -290,11 +285,17 @@ export default function ShipmentSimulator({ variants }: { variants: any[] }) {
                         className="w-16 text-center border rounded p-1 bg-white"
                       />
                     </td>
-                    <td className="px-3 py-2 text-right font-mono">
-                      {row.unitFobRM.toFixed(2)}
+
+                    {/* NEW DATA */}
+                    <td className="px-3 py-2 text-center bg-purple-50 font-medium">
+                      {row.exactCartons.toFixed(2)}
                     </td>
-                    <td className="px-3 py-2 text-right text-gray-500">
-                      {row.allocatedLogisticsPerUnit.toFixed(2)}
+                    <td className="px-3 py-2 text-right bg-purple-50 font-medium">
+                      {row.totalItemCBM.toFixed(3)}
+                    </td>
+
+                    <td className="px-3 py-2 text-right font-mono text-gray-600">
+                      {row.unitFobRM.toFixed(2)}
                     </td>
                     <td className="px-3 py-2 text-right font-bold text-blue-700 bg-blue-50">
                       {row.landedCost.toFixed(2)}
