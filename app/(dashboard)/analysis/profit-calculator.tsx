@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, Calculator, Box, Download, Truck, Anchor, Save, FolderOpen } from 'lucide-react'
+import { Plus, Trash2, Box, Download, Truck, Anchor, Save, FolderOpen, Printer } from 'lucide-react'
 import { saveScenario, deleteScenario, getScenario } from './actions'
 import { useRouter } from 'next/navigation'
 
@@ -93,17 +93,15 @@ export default function ShipmentSimulator({
     setIsLoading(false)
     setScenarioName("")
     alert("Draft Saved Successfully!")
-    router.refresh() // Refresh list of saved scenarios
+    router.refresh()
   }
 
   const handleLoad = async (id: string) => {
     if(!confirm("Loading a draft will replace your current work. Continue?")) return
-    
     setIsLoading(true)
     const { scenario, items } = await getScenario(id)
     
     if (scenario) {
-      // Set Variables
       setExchangeRate(scenario.exchange_rate ?? 4.75)
       setOceanLumpSum(scenario.ocean_lump_sum ?? 5000)
       setTruckingLumpSum(scenario.trucking_lump_sum ?? 800)
@@ -113,22 +111,14 @@ export default function ShipmentSimulator({
       setLicense(scenario.license ?? 0.30)
     }
 
-    // Set Items (Map back to variant details)
-    // FIX: Added (items || []) to ensure it doesn't crash if null
     const loadedItems = (items || []).map((i: any) => ({
-        ...i.variants, // Spread variant details
+        ...i.variants, 
         uniqueId: Math.random(),
         orderQty: i.qty,
         targetPrice: i.target_price
     }))
     setOrderItems(loadedItems)
     setIsLoading(false)
-  }
-
-  const handleDelete = async (id: string) => {
-    if(!confirm("Are you sure you want to delete this draft?")) return
-    await deleteScenario(id)
-    router.refresh()
   }
 
   // --- ENGINE: CALCULATIONS ---
@@ -198,14 +188,30 @@ export default function ShipmentSimulator({
     a.href = url; a.download = `shipment_analysis_${new Date().toISOString().slice(0,10)}.csv`; a.click()
   }
 
+  // --- PRINT HANDLER ---
+  const handlePrint = () => {
+    window.print()
+  }
+
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-full min-h-screen">
       
+      {/* --- INJECT PRINT STYLES --- */}
+      <style jsx global>{`
+        @media print {
+          @page { size: landscape; margin: 10mm; }
+          .print-hidden { display: none !important; }
+          .print-full-width { width: 100% !important; }
+          .print-visible { display: block !important; }
+          body { -webkit-print-color-adjust: exact; }
+        }
+      `}</style>
+
       {/* --- LEFT: MAIN WORKSPACE --- */}
-      <div className="flex-1 space-y-6">
+      <div className="flex-1 space-y-6 print-full-width">
         
         {/* TOP BAR: LOAD / SAVE */}
-        <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 flex items-center justify-between">
+        <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 flex items-center justify-between print-hidden">
             <div className="flex items-center gap-2">
                 <FolderOpen className="text-gray-500" size={20} />
                 <span className="text-sm font-bold text-gray-700">Saved Drafts:</span>
@@ -234,32 +240,43 @@ export default function ShipmentSimulator({
             </div>
         </div>
 
+        {/* PRINT ONLY HEADER (Settings Summary) */}
+        <div className="hidden print-visible mb-4 border-b border-black pb-2">
+            <h1 className="text-xl font-bold uppercase">Shipment Profit Analysis</h1>
+            <div className="flex gap-6 text-xs text-gray-600 mt-1">
+                <span><strong>Rate:</strong> {exchangeRate}</span>
+                <span><strong>Ocean:</strong> RM {oceanLumpSum}</span>
+                <span><strong>Trucking:</strong> RM {truckingLumpSum}</span>
+                <span><strong>Duty:</strong> {isFormE ? '0% (Form E)' : `${manualDutyPct}%`}</span>
+                <span><strong>Overheads:</strong> RM {consumable} + {license}</span>
+            </div>
+        </div>
+
         {/* KPI Header */}
         <div className="grid grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-            <p className="text-xs font-bold text-gray-500 uppercase">Volume (CBM)</p>
-            <h3 className="text-2xl font-bold text-indigo-600">{calculation.totals.cbm.toFixed(3)} m³</h3>
-            <div className="text-xs text-gray-400 mt-1">
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 print:border-black">
+            <p className="text-xs font-bold text-gray-500 uppercase">Total Volume</p>
+            <h3 className="text-2xl font-bold text-indigo-600 print:text-black">{calculation.totals.cbm.toFixed(3)} m³</h3>
+            <div className="text-xs text-gray-400 mt-1 print:text-black">
               {calculation.totals.cartons.toFixed(1)} Total Cartons
             </div>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 print:border-black">
             <p className="text-xs font-bold text-gray-500 uppercase">Total FOB Value</p>
-            <h3 className="text-2xl font-bold text-blue-600">{formatRM(calculation.totals.fobRM)}</h3>
+            <h3 className="text-2xl font-bold text-blue-600 print:text-black">{formatRM(calculation.totals.fobRM)}</h3>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 print:border-black">
             <p className="text-xs font-bold text-gray-500 uppercase">Tax Payable (SST)</p>
-            <h3 className="text-2xl font-bold text-red-600">{formatRM(calculation.totals.sst)}</h3>
+            <h3 className="text-2xl font-bold text-red-600 print:text-black">{formatRM(calculation.totals.sst)}</h3>
           </div>
-          <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-900 text-white">
-            <p className="text-xs font-bold text-gray-400 uppercase">Total Cash Outlay</p>
+          <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-900 text-white print:bg-white print:text-black print:border-black">
+            <p className="text-xs font-bold text-gray-400 uppercase print:text-gray-600">Total Cash Outlay</p>
             <h3 className="text-xl font-bold">{formatRM(calculation.totals.cashOutlay)}</h3>
-            <p className="text-xs text-gray-400 mt-1">Goods + Logs + Tax</p>
           </div>
         </div>
 
-        {/* Item Selector */}
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex gap-2 items-end">
+        {/* Item Selector (Hidden on Print) */}
+        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex gap-2 items-end print-hidden">
            <div className="flex-1 grid grid-cols-3 gap-2">
               <div>
                 <label className="text-xs text-gray-500 block mb-1">Brand</label>
@@ -293,74 +310,82 @@ export default function ShipmentSimulator({
         </div>
 
         {/* Main Table */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="flex justify-between items-center p-3 border-b bg-gray-50">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden print:border-black">
+          <div className="flex justify-between items-center p-3 border-b bg-gray-50 print:bg-white print:border-black">
             <h3 className="font-bold text-gray-700">Shipment Manifest</h3>
-            <button onClick={exportToCSV} className="flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-900">
-              <Download size={14} /> Export Excel
-            </button>
+            <div className="flex gap-2 print-hidden">
+                <button onClick={exportToCSV} className="flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-900 border border-green-200 px-2 py-1 rounded">
+                <Download size={14} /> Excel
+                </button>
+                <button onClick={handlePrint} className="flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-900 border border-blue-200 px-2 py-1 rounded">
+                <Printer size={14} /> Print PDF
+                </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-xs">
-              <thead className="bg-gray-100 text-gray-600 uppercase font-bold">
+              <thead className="bg-gray-100 text-gray-600 uppercase font-bold print:bg-white print:text-black print:border-b-2 print:border-black">
                 <tr>
                   <th className="px-3 py-2 text-left">Item Details</th>
-                  <th className="px-3 py-2 text-center bg-yellow-50">Order Qty</th>
-                  <th className="px-3 py-2 text-center bg-purple-50">Cartons</th>
-                  <th className="px-3 py-2 text-right bg-purple-50">Row CBM</th>
+                  <th className="px-3 py-2 text-center bg-yellow-50 print:bg-white">Qty</th>
+                  <th className="px-3 py-2 text-center bg-purple-50 print:bg-white">Ctn</th>
+                  <th className="px-3 py-2 text-right bg-purple-50 print:bg-white">CBM</th>
                   <th className="px-3 py-2 text-right">FOB (RM)</th>
-                  <th className="px-3 py-2 text-right bg-blue-50">Landed Cost</th>
-                  <th className="px-3 py-2 text-center bg-green-50">Target Price</th>
-                  <th className="px-3 py-2 text-right bg-green-50">Gross Profit</th>
-                  <th className="px-3 py-2 text-right bg-green-50">Margin</th>
-                  <th className="px-3 py-2 text-center">Action</th>
+                  <th className="px-3 py-2 text-right bg-blue-50 print:bg-white">Landed</th>
+                  <th className="px-3 py-2 text-center bg-green-50 print:bg-white">Target</th>
+                  <th className="px-3 py-2 text-right bg-green-50 print:bg-white">Profit</th>
+                  <th className="px-3 py-2 text-right bg-green-50 print:bg-white">Margin</th>
+                  <th className="px-3 py-2 text-center print-hidden">Act</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 print:divide-gray-300">
                 {calculation.rows.map((row) => (
-                  <tr key={row.uniqueId} className={`hover:bg-gray-50 ${row.isLowMargin ? 'bg-red-50' : ''}`}>
+                  <tr key={row.uniqueId} className={`hover:bg-gray-50 ${row.isLowMargin ? 'bg-red-50' : ''} print:bg-white`}>
                     <td className="px-3 py-2">
                       <div className="font-bold text-gray-900">{row.item_code}</div>
                       <div className="text-gray-500 truncate max-w-[200px]">{row.name}</div>
                     </td>
-                    <td className="px-3 py-2 text-center bg-yellow-50">
+                    <td className="px-3 py-2 text-center bg-yellow-50 print:bg-white">
                       <input 
                         type="number" 
                         value={row.orderQty} 
                         onChange={(e) => updateOrderRow(row.uniqueId, 'orderQty', parseInt(e.target.value))}
-                        className="w-16 text-center border rounded p-1 bg-white"
+                        className="w-16 text-center border rounded p-1 bg-white print-hidden"
                       />
+                      <span className="hidden print:inline">{row.orderQty}</span>
                     </td>
-                    <td className="px-3 py-2 text-center bg-purple-50 font-medium">
+                    <td className="px-3 py-2 text-center bg-purple-50 print:bg-white font-medium">
                       {row.exactCartons.toFixed(2)}
                     </td>
-                    <td className="px-3 py-2 text-right bg-purple-50 font-medium">
+                    <td className="px-3 py-2 text-right bg-purple-50 print:bg-white font-medium">
                       {row.totalItemCBM.toFixed(3)}
                     </td>
+
                     <td className="px-3 py-2 text-right font-mono text-gray-600">
                       {row.unitFobRM.toFixed(2)}
                     </td>
-                    <td className="px-3 py-2 text-right font-bold text-blue-700 bg-blue-50">
+                    <td className="px-3 py-2 text-right font-bold text-blue-700 bg-blue-50 print:bg-white print:text-black">
                       {row.landedCost.toFixed(2)}
                     </td>
-                    <td className="px-3 py-2 text-center bg-green-50">
+                    <td className="px-3 py-2 text-center bg-green-50 print:bg-white">
                       <input 
                         type="number" 
                         value={row.targetPrice} 
                         onChange={(e) => updateOrderRow(row.uniqueId, 'targetPrice', parseFloat(e.target.value))}
-                        className="w-20 text-right border rounded p-1 bg-white"
+                        className="w-20 text-right border rounded p-1 bg-white print-hidden"
                         step="0.01"
                       />
+                      <span className="hidden print:inline">{row.targetPrice.toFixed(2)}</span>
                     </td>
-                    <td className={`px-3 py-2 text-right font-bold bg-green-50 ${row.grossProfit > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                    <td className={`px-3 py-2 text-right font-bold bg-green-50 print:bg-white ${row.grossProfit > 0 ? 'text-green-700' : 'text-red-700'}`}>
                       {row.grossProfit.toFixed(2)}
                     </td>
-                    <td className="px-3 py-2 text-right font-bold bg-green-50">
+                    <td className="px-3 py-2 text-right font-bold bg-green-50 print:bg-white">
                       <span className={row.isLowMargin ? 'text-red-600' : 'text-green-600'}>
                         {row.margin.toFixed(1)}%
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-center">
+                    <td className="px-3 py-2 text-center print-hidden">
                       <button onClick={() => handleRemove(row.uniqueId)} className="text-red-400 hover:text-red-600">
                         <Trash2 size={14} />
                       </button>
@@ -374,7 +399,7 @@ export default function ShipmentSimulator({
       </div>
 
       {/* --- RIGHT: LOGISTICS SIDEBAR --- */}
-      <div className="w-full lg:w-80 bg-white border-l border-gray-200 p-6 flex flex-col gap-6 overflow-y-auto">
+      <div className="w-full lg:w-80 bg-white border-l border-gray-200 p-6 flex flex-col gap-6 overflow-y-auto print-hidden">
         <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
           <Truck size={20} /> Logistics & Tax
         </h2>
