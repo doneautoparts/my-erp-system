@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
-import { Plus, Trash2, Calculator, Box, TrendingUp, AlertTriangle, Download, Truck, Anchor, Save, FolderOpen } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Plus, Trash2, Calculator, Box, Download, Truck, Anchor, Save, FolderOpen } from 'lucide-react'
 import { saveScenario, deleteScenario, getScenario } from './actions'
 import { useRouter } from 'next/navigation'
 
@@ -102,17 +102,20 @@ export default function ShipmentSimulator({
     setIsLoading(true)
     const { scenario, items } = await getScenario(id)
     
-    // Set Variables
-    setExchangeRate(scenario.exchange_rate)
-    setOceanLumpSum(scenario.ocean_lump_sum)
-    setTruckingLumpSum(scenario.trucking_lump_sum)
-    setIsFormE(scenario.is_form_e)
-    setManualDutyPct(scenario.manual_duty_pct)
-    setConsumable(scenario.consumable)
-    setLicense(scenario.license)
+    if (scenario) {
+      // Set Variables
+      setExchangeRate(scenario.exchange_rate ?? 4.75)
+      setOceanLumpSum(scenario.ocean_lump_sum ?? 5000)
+      setTruckingLumpSum(scenario.trucking_lump_sum ?? 800)
+      setIsFormE(scenario.is_form_e ?? true)
+      setManualDutyPct(scenario.manual_duty_pct ?? 10)
+      setConsumable(scenario.consumable ?? 2.00)
+      setLicense(scenario.license ?? 0.30)
+    }
 
     // Set Items (Map back to variant details)
-    const loadedItems = items.map((i: any) => ({
+    // FIX: Added (items || []) to ensure it doesn't crash if null
+    const loadedItems = (items || []).map((i: any) => ({
         ...i.variants, // Spread variant details
         uniqueId: Math.random(),
         orderQty: i.qty,
