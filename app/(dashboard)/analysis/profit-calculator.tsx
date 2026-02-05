@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, Box, Download, Truck, Anchor, Save, FolderOpen, Printer } from 'lucide-react'
+import { Plus, Trash2, Download, Truck, Anchor, Save, FolderOpen, Printer } from 'lucide-react'
 import { saveScenario, deleteScenario, getScenario } from './actions'
 import { useRouter } from 'next/navigation'
 
@@ -24,7 +24,7 @@ export default function ShipmentSimulator({
 }) {
   const router = useRouter()
 
-  // --- LOGISTICS & TAX SCENARIO INPUTS ---
+  // --- VARIABLES ---
   const [exchangeRate, setExchangeRate] = useState(4.75)
   const [oceanLumpSum, setOceanLumpSum] = useState(5000) 
   const [truckingLumpSum, setTruckingLumpSum] = useState(800) 
@@ -33,20 +33,18 @@ export default function ShipmentSimulator({
   const [consumable, setConsumable] = useState(2.00) 
   const [license, setLicense] = useState(0.30) 
 
-  // --- SELECTION STATE ---
+  // --- SELECTION ---
   const [selectedBrand, setSelectedBrand] = useState("")
   const [selectedProduct, setSelectedProduct] = useState("")
   const [selectedVariantId, setSelectedVariantId] = useState("")
   const [qty, setQty] = useState(1)
 
-  // --- ORDER DRAFT STATE ---
+  // --- STATE ---
   const [orderItems, setOrderItems] = useState<any[]>([])
-
-  // --- SAVE/LOAD STATE ---
   const [scenarioName, setScenarioName] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
-  // --- FILTERING LOGIC ---
+  // --- FILTERS ---
   const brands = useMemo(() => {
     const unique = new Set(variants.map(v => v.products?.brands?.name).filter(Boolean))
     return Array.from(unique).sort()
@@ -66,7 +64,7 @@ export default function ShipmentSimulator({
       .sort((a, b) => (a.item_code || '').localeCompare(b.item_code || ''))
   }, [variants, selectedBrand, selectedProduct])
 
-  // --- HANDLERS ---
+  // --- ACTIONS ---
   const handleAddItem = () => {
     const item = variants.find(v => v.id === selectedVariantId)
     if (!item) return
@@ -89,24 +87,21 @@ export default function ShipmentSimulator({
     ))
   }
 
-  // --- SAVE / LOAD ACTIONS ---
   const handleSave = async () => {
     if (!scenarioName) return alert("Please enter a name for this draft")
     setIsLoading(true)
     const variables = { exchangeRate, oceanLumpSum, truckingLumpSum, isFormE, manualDutyPct, consumable, license }
-    
     await saveScenario(scenarioName, variables, orderItems)
     setIsLoading(false)
     setScenarioName("")
-    alert("Draft Saved Successfully!")
+    alert("Draft Saved!")
     router.refresh()
   }
 
   const handleLoad = async (id: string) => {
-    if(!confirm("Loading a draft will replace your current work. Continue?")) return
+    if(!confirm("Load draft? Unsaved changes will be lost.")) return
     setIsLoading(true)
     const { scenario, items } = await getScenario(id)
-    
     if (scenario) {
       setExchangeRate(scenario.exchange_rate ?? 4.75)
       setOceanLumpSum(scenario.ocean_lump_sum ?? 5000)
@@ -116,18 +111,13 @@ export default function ShipmentSimulator({
       setConsumable(scenario.consumable ?? 2.00)
       setLicense(scenario.license ?? 0.30)
     }
-
     const loadedItems = (items || []).map((i: any) => ({
-        ...i.variants, 
-        uniqueId: Math.random(),
-        orderQty: i.qty,
-        targetPrice: i.target_price
+        ...i.variants, uniqueId: Math.random(), orderQty: i.qty, targetPrice: i.target_price
     }))
     setOrderItems(loadedItems)
     setIsLoading(false)
   }
 
-  // --- ENGINE: CALCULATIONS ---
   const calculation = useMemo(() => {
     let totalCBM = 0
     let totalFOB_RM = 0
@@ -180,28 +170,17 @@ export default function ShipmentSimulator({
 
     return {
       rows: finalRows,
-      totals: { 
-        qty: totalQty,
-        cbm: totalCBM, 
-        cartons: totalExactCartons, 
-        fobRM: totalFOB_RM, 
-        fobUSD: totalFOB_USD,
-        logistics: totalLogisticsLumpSum, 
-        sst: totalSST, 
-        cashOutlay: totalFOB_RM + totalLogisticsLumpSum + totalSST + (totalFOB_RM * dutyRate) 
-      }
+      totals: { qty: totalQty, cbm: totalCBM, cartons: totalExactCartons, fobRM: totalFOB_RM, fobUSD: totalFOB_USD, logistics: totalLogisticsLumpSum, sst: totalSST, cashOutlay: totalFOB_RM + totalLogisticsLumpSum + totalSST + (totalFOB_RM * dutyRate) }
     }
   }, [orderItems, exchangeRate, oceanLumpSum, truckingLumpSum, isFormE, manualDutyPct, consumable, license])
 
   const exportToCSV = () => {
-    // ADDED "Cost (USD)" to export
     const headers = ["Item Code", "Product", "Qty", "Cartons", "Total CBM", "Cost (USD)", "FOB(RM)", "Landed Cost", "Sell Price", "Profit", "Margin %"]
     const csvRows = [
       headers.join(','),
       ...calculation.rows.map(r => [
         r.item_code, `"${r.name}"`, r.orderQty, r.exactCartons.toFixed(2), r.totalItemCBM.toFixed(4),
-        r.unitFobUSD.toFixed(2), // NEW
-        r.unitFobRM.toFixed(2), r.landedCost.toFixed(2), r.targetPrice.toFixed(2), r.grossProfit.toFixed(2), r.margin.toFixed(2)
+        r.unitFobUSD.toFixed(2), r.unitFobRM.toFixed(2), r.landedCost.toFixed(2), r.targetPrice.toFixed(2), r.grossProfit.toFixed(2), r.margin.toFixed(2)
       ].join(','))
     ]
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' })
@@ -210,105 +189,94 @@ export default function ShipmentSimulator({
     a.href = url; a.download = `shipment_analysis_${new Date().toISOString().slice(0,10)}.csv`; a.click()
   }
 
-  // --- PRINT HANDLER ---
-  const handlePrint = () => {
-    window.print()
-  }
+  const handlePrint = () => window.print()
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-full min-h-screen">
       
-      {/* --- INJECT PRINT STYLES --- */}
+      {/* --- NUCLEAR PRINT STYLE: HIDES SIDEBAR AND TOP MENU --- */}
       <style jsx global>{`
         @media print {
-          @page { size: landscape; margin: 10mm; }
+          @page { size: landscape; margin: 5mm; }
+          body * { visibility: hidden; } /* Hide everything */
+          #print-area, #print-area * { visibility: visible; } /* Show only analysis */
+          #print-area { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
           .print-hidden { display: none !important; }
-          .print-full-width { width: 100% !important; }
+          .print-full-width { width: 100% !important; margin: 0 !important; }
           .print-visible { display: block !important; }
-          body { -webkit-print-color-adjust: exact; }
         }
       `}</style>
 
-      {/* --- LEFT: MAIN WORKSPACE --- */}
-      <div className="flex-1 space-y-6 print-full-width">
+      {/* --- WRAPPER FOR PRINTING --- */}
+      <div id="print-area" className="flex-1 space-y-6 print-full-width">
         
-        {/* TOP BAR: LOAD / SAVE */}
+        {/* HEADER & CONTROLS (Hidden on Print) */}
         <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 flex items-center justify-between print-hidden">
             <div className="flex items-center gap-2">
                 <FolderOpen className="text-gray-500" size={20} />
                 <span className="text-sm font-bold text-gray-700">Saved Drafts:</span>
-                <select 
-                    className="border rounded text-sm p-1 max-w-[200px]"
-                    onChange={(e) => { if(e.target.value) handleLoad(e.target.value) }}
-                    defaultValue=""
-                >
+                <select className="border rounded text-sm p-1 max-w-[200px]" onChange={(e) => { if(e.target.value) handleLoad(e.target.value) }} defaultValue="">
                     <option value="" disabled>-- Load a Draft --</option>
                     {savedScenarios.map((s: any) => (
                         <option key={s.id} value={s.id}>{s.name} ({new Date(s.created_at).toLocaleDateString()})</option>
                     ))}
                 </select>
             </div>
-            
             <div className="flex items-center gap-2">
-                <input 
-                    placeholder="Enter Draft Name..." 
-                    className="border rounded text-sm p-1"
-                    value={scenarioName}
-                    onChange={(e) => setScenarioName(e.target.value)}
-                />
-                <button onClick={handleSave} disabled={isLoading} className="flex items-center gap-1 bg-gray-800 text-white px-3 py-1 rounded text-sm hover:bg-black">
-                    <Save size={14} /> Save Draft
-                </button>
+                <input placeholder="Enter Draft Name..." className="border rounded text-sm p-1" value={scenarioName} onChange={(e) => setScenarioName(e.target.value)} />
+                <button onClick={handleSave} disabled={isLoading} className="flex items-center gap-1 bg-gray-800 text-white px-3 py-1 rounded text-sm hover:bg-black"><Save size={14} /> Save Draft</button>
             </div>
         </div>
 
         {/* PRINT ONLY HEADER */}
-        <div className="hidden print-visible mb-4 border-b border-black pb-2">
-            <h1 className="text-xl font-bold uppercase">Shipment Profit Analysis</h1>
-            <div className="flex gap-6 text-xs text-gray-600 mt-1">
-                <span><strong>Rate:</strong> {exchangeRate}</span>
-                <span><strong>Ocean:</strong> RM {oceanLumpSum}</span>
-                <span><strong>Trucking:</strong> RM {truckingLumpSum}</span>
-                <span><strong>Duty:</strong> {isFormE ? '0% (Form E)' : `${manualDutyPct}%`}</span>
+        <div className="hidden print-visible mb-6">
+            <h1 className="text-2xl font-bold uppercase border-b-2 border-black pb-2 mb-2">NEW ORDER ANALYSIS</h1>
+            <div className="grid grid-cols-4 gap-4 text-xs text-gray-700 font-mono">
+                <div>RATE: {exchangeRate}</div>
+                <div>OCEAN: RM {oceanLumpSum}</div>
+                <div>TRUCKING: RM {truckingLumpSum}</div>
+                <div>DUTY: {isFormE ? '0% (Form E)' : `${manualDutyPct}%`}</div>
             </div>
         </div>
 
-        {/* KPI HEADER (6 COLUMNS) */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 print:border-black">
-            <p className="text-[10px] font-bold text-gray-500 uppercase">Total Qty</p>
-            <h3 className="text-lg font-bold text-gray-800 print:text-black">{formatQty(calculation.totals.qty)}</h3>
-            <div className="text-[10px] text-gray-400 mt-1">Pcs/Units</div>
-          </div>
-          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 print:border-black">
-            <p className="text-[10px] font-bold text-gray-500 uppercase">Total Volume</p>
-            <h3 className="text-lg font-bold text-indigo-600 print:text-black">{calculation.totals.cbm.toFixed(3)} m³</h3>
-            <div className="text-[10px] text-gray-400 mt-1">
-              {calculation.totals.cartons.toFixed(1)} Ctns
-            </div>
-          </div>
-          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 print:border-black">
-            <p className="text-[10px] font-bold text-gray-500 uppercase">Total FOB Value</p>
-            <h3 className="text-lg font-bold text-blue-700 print:text-black">{formatUSD(calculation.totals.fobUSD)}</h3>
-            <div className="text-[10px] font-semibold text-gray-600 mt-1">
-              {formatRM(calculation.totals.fobRM)}
-            </div>
-          </div>
-          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 print:border-black">
-            <p className="text-[10px] font-bold text-gray-500 uppercase">Total Logistics</p>
-            <h3 className="text-lg font-bold text-orange-600 print:text-black">{formatRM(calculation.totals.logistics)}</h3>
-            <div className="text-[10px] text-gray-400 mt-1">Ocean + Trucking</div>
-          </div>
-          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 print:border-black">
-            <p className="text-[10px] font-bold text-gray-500 uppercase">Tax Payable (SST)</p>
-            <h3 className="text-lg font-bold text-red-600 print:text-black">{formatRM(calculation.totals.sst)}</h3>
-            <div className="text-[10px] text-gray-400 mt-1">10% on Value+Logs</div>
-          </div>
-          <div className="bg-gray-800 p-3 rounded-lg shadow-sm border border-gray-900 text-white print:bg-white print:text-black print:border-black">
-            <p className="text-[10px] font-bold text-gray-400 uppercase print:text-gray-600">Total Cash Outlay</p>
-            <h3 className="text-xl font-bold">{formatRM(calculation.totals.cashOutlay)}</h3>
-            <div className="text-[10px] text-gray-400 mt-1 print:text-gray-500">All Inclusive</div>
-          </div>
+        {/* --- SUMMARY TABLE (REPLACED CARDS) --- */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden print:border-2 print:border-black">
+          <table className="min-w-full text-sm">
+             <thead className="bg-gray-100 text-gray-700 uppercase font-bold border-b border-gray-300 print:bg-gray-200 print:text-black">
+                <tr>
+                   <th className="px-4 py-3 text-center border-r">Total Qty (Pcs)</th>
+                   <th className="px-4 py-3 text-center border-r">Total CBM (Cartons)</th>
+                   <th className="px-4 py-3 text-right border-r">Total FOB (USD)</th>
+                   <th className="px-4 py-3 text-right border-r">Total Logistics</th>
+                   <th className="px-4 py-3 text-right border-r">Tax Payable (SST)</th>
+                   <th className="px-4 py-3 text-right bg-gray-800 text-white print:bg-black print:text-white">Total Cash Outlay</th>
+                </tr>
+             </thead>
+             <tbody>
+                <tr>
+                   <td className="px-4 py-4 text-center font-bold text-xl border-r">
+                      {formatQty(calculation.totals.qty)}
+                   </td>
+                   <td className="px-4 py-4 text-center border-r">
+                      <div className="font-bold text-xl text-indigo-700 print:text-black">{calculation.totals.cbm.toFixed(3)} m³</div>
+                      <div className="text-xs text-gray-500">{calculation.totals.cartons.toFixed(1)} Ctns</div>
+                   </td>
+                   <td className="px-4 py-4 text-right border-r">
+                      <div className="font-bold text-xl text-blue-700 print:text-black">{formatUSD(calculation.totals.fobUSD)}</div>
+                      <div className="text-xs text-gray-500">{formatRM(calculation.totals.fobRM)}</div>
+                   </td>
+                   <td className="px-4 py-4 text-right font-bold text-xl text-orange-600 border-r print:text-black">
+                      {formatRM(calculation.totals.logistics)}
+                   </td>
+                   <td className="px-4 py-4 text-right font-bold text-xl text-red-600 border-r print:text-black">
+                      {formatRM(calculation.totals.sst)}
+                   </td>
+                   <td className="px-4 py-4 text-right font-bold text-2xl bg-gray-50 text-gray-900 border-r print:text-black">
+                      {formatRM(calculation.totals.cashOutlay)}
+                   </td>
+                </tr>
+             </tbody>
+          </table>
         </div>
 
         {/* Item Selector (Hidden on Print) */}
@@ -346,9 +314,9 @@ export default function ShipmentSimulator({
         </div>
 
         {/* Main Table */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden print:border-black">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden print:border-2 print:border-black">
           <div className="flex justify-between items-center p-3 border-b bg-gray-50 print:bg-white print:border-black">
-            <h3 className="font-bold text-gray-700">Shipment Manifest</h3>
+            <h3 className="font-bold text-gray-700">Detailed Manifest</h3>
             <div className="flex gap-2 print-hidden">
                 <button onClick={exportToCSV} className="flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-900 border border-green-200 px-2 py-1 rounded">
                 <Download size={14} /> Excel
@@ -360,16 +328,13 @@ export default function ShipmentSimulator({
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-xs">
-              <thead className="bg-gray-100 text-gray-600 uppercase font-bold print:bg-white print:text-black print:border-b-2 print:border-black">
+              <thead className="bg-gray-100 text-gray-600 uppercase font-bold print:bg-gray-200 print:text-black print:border-b print:border-black">
                 <tr>
                   <th className="px-3 py-2 text-left">Item Details</th>
                   <th className="px-3 py-2 text-center bg-yellow-50 print:bg-white">Qty</th>
                   <th className="px-3 py-2 text-center bg-purple-50 print:bg-white">Ctn</th>
                   <th className="px-3 py-2 text-right bg-purple-50 print:bg-white">CBM</th>
-                  
-                  {/* NEW COLUMN */}
                   <th className="px-3 py-2 text-right">Cost (USD)</th>
-                  
                   <th className="px-3 py-2 text-right">FOB (RM)</th>
                   <th className="px-3 py-2 text-right bg-blue-50 print:bg-white">Landed</th>
                   <th className="px-3 py-2 text-center bg-green-50 print:bg-white">Target</th>
@@ -394,24 +359,11 @@ export default function ShipmentSimulator({
                       />
                       <span className="hidden print:inline">{row.orderQty}</span>
                     </td>
-                    <td className="px-3 py-2 text-center bg-purple-50 print:bg-white font-medium">
-                      {row.exactCartons.toFixed(2)}
-                    </td>
-                    <td className="px-3 py-2 text-right bg-purple-50 print:bg-white font-medium">
-                      {row.totalItemCBM.toFixed(3)}
-                    </td>
-
-                    {/* NEW DATA CELL */}
-                    <td className="px-3 py-2 text-right font-mono text-gray-600">
-                      {row.unitFobUSD > 0 ? row.unitFobUSD.toFixed(2) : '-'}
-                    </td>
-
-                    <td className="px-3 py-2 text-right font-mono text-gray-600">
-                      {row.unitFobRM.toFixed(2)}
-                    </td>
-                    <td className="px-3 py-2 text-right font-bold text-blue-700 bg-blue-50 print:bg-white print:text-black">
-                      {row.landedCost.toFixed(2)}
-                    </td>
+                    <td className="px-3 py-2 text-center bg-purple-50 print:bg-white font-medium">{row.exactCartons.toFixed(2)}</td>
+                    <td className="px-3 py-2 text-right bg-purple-50 print:bg-white font-medium">{row.totalItemCBM.toFixed(3)}</td>
+                    <td className="px-3 py-2 text-right font-mono text-gray-600">{row.unitFobUSD > 0 ? row.unitFobUSD.toFixed(2) : '-'}</td>
+                    <td className="px-3 py-2 text-right font-mono text-gray-600">{row.unitFobRM.toFixed(2)}</td>
+                    <td className="px-3 py-2 text-right font-bold text-blue-700 bg-blue-50 print:bg-white print:text-black">{row.landedCost.toFixed(2)}</td>
                     <td className="px-3 py-2 text-center bg-green-50 print:bg-white">
                       <input 
                         type="number" 
@@ -422,18 +374,12 @@ export default function ShipmentSimulator({
                       />
                       <span className="hidden print:inline">{row.targetPrice.toFixed(2)}</span>
                     </td>
-                    <td className={`px-3 py-2 text-right font-bold bg-green-50 print:bg-white ${row.grossProfit > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                      {row.grossProfit.toFixed(2)}
-                    </td>
+                    <td className={`px-3 py-2 text-right font-bold bg-green-50 print:bg-white ${row.grossProfit > 0 ? 'text-green-700' : 'text-red-700'}`}>{row.grossProfit.toFixed(2)}</td>
                     <td className="px-3 py-2 text-right font-bold bg-green-50 print:bg-white">
-                      <span className={row.isLowMargin ? 'text-red-600' : 'text-green-600'}>
-                        {row.margin.toFixed(1)}%
-                      </span>
+                      <span className={row.isLowMargin ? 'text-red-600' : 'text-green-600'}>{row.margin.toFixed(1)}%</span>
                     </td>
                     <td className="px-3 py-2 text-center print-hidden">
-                      <button onClick={() => handleRemove(row.uniqueId)} className="text-red-400 hover:text-red-600">
-                        <Trash2 size={14} />
-                      </button>
+                      <button onClick={() => handleRemove(row.uniqueId)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button>
                     </td>
                   </tr>
                 ))}
@@ -443,82 +389,34 @@ export default function ShipmentSimulator({
         </div>
       </div>
 
-      {/* --- RIGHT: LOGISTICS SIDEBAR --- */}
+      {/* --- RIGHT: LOGISTICS SIDEBAR (Hidden on Print) --- */}
       <div className="w-full lg:w-80 bg-white border-l border-gray-200 p-6 flex flex-col gap-6 overflow-y-auto print-hidden">
-        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-          <Truck size={20} /> Logistics & Tax
-        </h2>
-
+        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Truck size={20} /> Logistics & Tax</h2>
         <div className="space-y-4">
           <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
             <label className="text-xs font-bold text-blue-800 uppercase block mb-1">Exchange Rate (USD)</label>
-            <input 
-              type="number" 
-              value={exchangeRate} 
-              onChange={e => setExchangeRate(parseFloat(e.target.value))} 
-              className="w-full text-right font-mono font-bold border-blue-300 rounded p-2 text-lg" 
-              step="0.01" 
-            />
+            <input type="number" value={exchangeRate} onChange={e => setExchangeRate(parseFloat(e.target.value))} className="w-full text-right font-mono font-bold border-blue-300 rounded p-2 text-lg" step="0.01" />
           </div>
-
           <div>
             <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Ocean & Port (RM)</label>
-            <div className="relative">
-              <Anchor size={16} className="absolute left-3 top-3 text-gray-400" />
-              <input 
-                type="number" 
-                value={oceanLumpSum} 
-                onChange={e => setOceanLumpSum(parseFloat(e.target.value))} 
-                className="w-full pl-9 border rounded p-2" 
-              />
-            </div>
+            <input type="number" value={oceanLumpSum} onChange={e => setOceanLumpSum(parseFloat(e.target.value))} className="w-full border rounded p-2" />
           </div>
-
           <div>
             <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Fwd & Trucking (RM)</label>
-            <div className="relative">
-              <Truck size={16} className="absolute left-3 top-3 text-gray-400" />
-              <input 
-                type="number" 
-                value={truckingLumpSum} 
-                onChange={e => setTruckingLumpSum(parseFloat(e.target.value))} 
-                className="w-full pl-9 border rounded p-2" 
-              />
-            </div>
+            <input type="number" value={truckingLumpSum} onChange={e => setTruckingLumpSum(parseFloat(e.target.value))} className="w-full border rounded p-2" />
           </div>
-
           <div className="border-t pt-4">
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-bold text-gray-500 uppercase">Form E (0% Duty)</label>
-              <input 
-                type="checkbox" 
-                checked={isFormE} 
-                onChange={e => setIsFormE(e.target.checked)} 
-                className="h-5 w-5 text-blue-600 rounded" 
-              />
+              <input type="checkbox" checked={isFormE} onChange={e => setIsFormE(e.target.checked)} className="h-5 w-5 text-blue-600 rounded" />
             </div>
             {!isFormE && (
-              <div className="mb-2">
-                <label className="text-xs text-gray-400">MFN Duty %</label>
-                <input 
-                  type="number" 
-                  value={manualDutyPct} 
-                  onChange={e => setManualDutyPct(parseFloat(e.target.value))} 
-                  className="w-full border rounded p-1 text-sm" 
-                />
-              </div>
+              <div className="mb-2"><label className="text-xs text-gray-400">MFN Duty %</label><input type="number" value={manualDutyPct} onChange={e => setManualDutyPct(parseFloat(e.target.value))} className="w-full border rounded p-1 text-sm" /></div>
             )}
           </div>
-
           <div className="border-t pt-4 grid grid-cols-2 gap-2">
-             <div>
-               <label className="text-[10px] font-bold text-gray-500 uppercase">Consumable</label>
-               <input type="number" value={consumable} onChange={e => setConsumable(parseFloat(e.target.value))} className="w-full border rounded p-1 text-sm" />
-             </div>
-             <div>
-               <label className="text-[10px] font-bold text-gray-500 uppercase">License</label>
-               <input type="number" value={license} onChange={e => setLicense(parseFloat(e.target.value))} className="w-full border rounded p-1 text-sm" />
-             </div>
+             <div><label className="text-[10px] font-bold text-gray-500 uppercase">Consumable</label><input type="number" value={consumable} onChange={e => setConsumable(parseFloat(e.target.value))} className="w-full border rounded p-1 text-sm" /></div>
+             <div><label className="text-[10px] font-bold text-gray-500 uppercase">License</label><input type="number" value={license} onChange={e => setLicense(parseFloat(e.target.value))} className="w-full border rounded p-1 text-sm" /></div>
           </div>
         </div>
       </div>
