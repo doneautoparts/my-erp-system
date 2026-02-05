@@ -15,6 +15,20 @@ const formatUSD = (val: number) =>
 const formatQty = (val: number) => 
   new Intl.NumberFormat('en-US').format(val)
 
+// Helper to safely get Product/Brand name whether it's an object or array
+const getSafeName = (obj: any, field: 'name' | 'brandName') => {
+  if (!obj) return ''
+  const product = Array.isArray(obj.products) ? obj.products[0] : obj.products
+  if (!product) return ''
+  
+  if (field === 'name') return product.name || ''
+  if (field === 'brandName') {
+    const brand = Array.isArray(product.brands) ? product.brands[0] : product.brands
+    return brand?.name || ''
+  }
+  return ''
+}
+
 export default function ShipmentSimulator({ 
   variants,
   savedScenarios 
@@ -26,13 +40,18 @@ export default function ShipmentSimulator({
 
   // --- VARIABLES ---
   const DEFAULT_RATE = 4.75
+  const DEFAULT_OCEAN = 5000
+  const DEFAULT_TRUCK = 800
+  const DEFAULT_CONSUMABLE = 2.00
+  const DEFAULT_LICENSE = 0.30
+
   const [exchangeRate, setExchangeRate] = useState(DEFAULT_RATE)
-  const [oceanLumpSum, setOceanLumpSum] = useState(5000) 
-  const [truckingLumpSum, setTruckingLumpSum] = useState(800) 
+  const [oceanLumpSum, setOceanLumpSum] = useState(DEFAULT_OCEAN) 
+  const [truckingLumpSum, setTruckingLumpSum] = useState(DEFAULT_TRUCK) 
   const [isFormE, setIsFormE] = useState(true) 
   const [manualDutyPct, setManualDutyPct] = useState(10) 
-  const [consumable, setConsumable] = useState(2.00) 
-  const [license, setLicense] = useState(0.30) 
+  const [consumable, setConsumable] = useState(DEFAULT_CONSUMABLE) 
+  const [license, setLicense] = useState(DEFAULT_LICENSE) 
 
   // --- SELECTION ---
   const [selectedBrand, setSelectedBrand] = useState("")
@@ -46,23 +65,27 @@ export default function ShipmentSimulator({
   const [scenarioName, setScenarioName] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
-  // --- FILTERS ---
+  // --- SAFE FILTERS ---
   const brands = useMemo(() => {
-    const unique = new Set(variants.map(v => v.products?.brands?.name).filter(Boolean))
+    // FIX: Use helper to safely get brand name
+    const unique = new Set(variants.map(v => getSafeName(v, 'brandName')).filter(Boolean))
     return Array.from(unique).sort()
   }, [variants])
 
   const products = useMemo(() => {
     if (!selectedBrand) return []
-    const filtered = variants.filter(v => v.products?.brands?.name === selectedBrand)
-    const unique = new Set(filtered.map(v => v.products?.name).filter(Boolean))
+    const filtered = variants.filter(v => getSafeName(v, 'brandName') === selectedBrand)
+    const unique = new Set(filtered.map(v => getSafeName(v, 'name')).filter(Boolean))
     return Array.from(unique).sort()
   }, [variants, selectedBrand])
 
   const filteredVariants = useMemo(() => {
     if (!selectedProduct) return []
     return variants
-      .filter(v => v.products?.brands?.name === selectedBrand && v.products?.name === selectedProduct)
+      .filter(v => 
+        getSafeName(v, 'brandName') === selectedBrand && 
+        getSafeName(v, 'name') === selectedProduct
+      )
       .sort((a, b) => (a.item_code || '').localeCompare(b.item_code || ''))
   }, [variants, selectedBrand, selectedProduct])
 
@@ -152,7 +175,12 @@ export default function ShipmentSimulator({
     let totalCBM = 0, totalFOB_RM = 0, totalFOB_USD = 0, totalExactCartons = 0, totalQty = 0
 
     const rowsWithVolume = orderItems.map(item => {
-      const unitCBM = (item.ctn_len * item.ctn_wid * item.ctn_height > 0) ? ((item.ctn_len * item.ctn_wid * item.ctn_height) / 1000000) / (item.ctn_qty || 1) : 0
+      const length = item.ctn_len || 0
+      const width = item.ctn_wid || 0
+      const height = item.ctn_height || 0
+      const pcsPerCtn = item.ctn_qty || 1
+      const exactCartons = item.orderQty / pcsPerCtn
+      const unitCBM = (length * width * height > 0) ? ((length * width * height) / 1000000) / pcsPerCtn : 0
       const totalItemCBM = unitCBM * item.orderQty
       const unitFobUSD = item.cost_usd || 0
       const unitFobRM = unitFobUSD > 0 ? unitFobUSD * exchangeRate : (item.cost_rm || 0)
@@ -195,13 +223,16 @@ export default function ShipmentSimulator({
     const csvRows = [
       headers.join(','),
       ...calculation.rows.map(r => [
-        `"${r.products?.brands?.name}"`, `"${r.products?.name}"`, r.item_code, `"${r.name}"`, 
+        `"${getSafeName(r, 'brandName')}"`, 
+        `"${getSafeName(r, 'name')}"`, 
+        r.item_code, 
+        `"${r.name}"`, 
         r.orderQty, (r.orderQty / (r.ctn_qty||1)).toFixed(2), r.totalItemCBM.toFixed(4),
         r.unitFobUSD.toFixed(2), r.unitFobRM.toFixed(2), r.landedCost.toFixed(2), r.targetPrice.toFixed(2), r.grossProfit.toFixed(2), r.margin.toFixed(2)
       ].join(','))
     ]
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' })
-    const url = window.URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `analysis.csv`; a.click()
+    const url = window.URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `shipment_analysis_${new Date().toISOString().slice(0,10)}.csv`; a.click()
   }
 
   const handlePrint = () => window.print()
@@ -215,22 +246,20 @@ export default function ShipmentSimulator({
           body * { visibility: hidden; }
           #print-area, #print-area * { visibility: visible; }
           #print-area { 
-            position: fixed; 
+            position: absolute; 
             left: 0; 
             top: 0; 
             width: 100vw; 
-            height: 100vh; 
-            background: white; 
-            z-index: 9999; 
-            padding: 10px;
+            margin: 0; padding: 0;
           }
           .print-hidden { display: none !important; }
+          .print-full-width { width: 100% !important; margin: 0 !important; }
           .print-visible { display: block !important; }
         }
       `}</style>
 
       {/* --- LEFT: MAIN WORKSPACE --- */}
-      <div id="print-area" className="flex-1 space-y-6">
+      <div id="print-area" className="flex-1 space-y-6 print-full-width">
         
         {/* TOP BAR */}
         <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 flex flex-wrap items-center justify-between gap-3 print-hidden">
@@ -248,12 +277,18 @@ export default function ShipmentSimulator({
             </div>
         </div>
 
-        {/* --- NEW HEADER: TITLE ONLY --- */}
-        <div className="mb-2">
-            <h1 className="text-2xl font-bold uppercase border-b-2 border-black pb-2 text-gray-800">NEW ORDER ANALYSIS</h1>
+        {/* PRINT ONLY HEADER */}
+        <div className="hidden print-visible mb-6">
+            <h1 className="text-2xl font-bold uppercase border-b-2 border-black pb-2 mb-2">NEW ORDER ANALYSIS</h1>
+            <div className="grid grid-cols-4 gap-4 text-xs text-gray-700 font-mono">
+                <div>RATE: {exchangeRate}</div>
+                <div>OCEAN: RM {oceanLumpSum}</div>
+                <div>TRUCKING: RM {truckingLumpSum}</div>
+                <div>DUTY: {isFormE ? '0% (Form E)' : `${manualDutyPct}%`}</div>
+            </div>
         </div>
 
-        {/* --- 10-CELL SUMMARY TABLE (5 Cols x 2 Rows) --- */}
+        {/* KPI HEADER (6 COLUMNS) */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden print:border-2 print:border-black mb-6">
           <table className="min-w-full text-sm">
              <thead className="bg-gray-100 text-gray-700 uppercase font-bold text-xs border-b border-gray-300 print:bg-gray-200 print:text-black">
@@ -307,7 +342,7 @@ export default function ShipmentSimulator({
           </table>
         </div>
 
-        {/* --- ITEM SELECTOR (Hidden Print) --- */}
+        {/* Item Selector */}
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex gap-2 items-end print-hidden">
            <div className="flex-1 grid grid-cols-3 gap-2">
               <div>
@@ -341,26 +376,26 @@ export default function ShipmentSimulator({
            </button>
         </div>
 
-        {/* --- MAIN TABLE --- */}
+        {/* MAIN TABLE */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden print:border-2 print:border-black">
           <div className="flex justify-between items-center p-3 border-b bg-gray-50 print:bg-white print:border-black">
             <h3 className="font-bold text-gray-700">Shipment Manifest</h3>
             <div className="flex gap-2 items-center print-hidden bg-gray-100 p-1 rounded-md">
-                <span className="text-xs font-bold text-gray-500 px-2">Global Price:</span>
+                <span className="text-xs font-bold text-gray-500 px-2">Set Price:</span>
                 <button onClick={() => handleGlobalTierChange('sell')} className={`px-2 py-1 text-xs rounded ${globalTier === 'sell' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500'}`}>SELL</button>
                 <button onClick={() => handleGlobalTierChange('online')} className={`px-2 py-1 text-xs rounded ${globalTier === 'online' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500'}`}>ONLINE</button>
                 <button onClick={() => handleGlobalTierChange('proposal')} className={`px-2 py-1 text-xs rounded ${globalTier === 'proposal' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500'}`}>PROP</button>
             </div>
             <div className="flex gap-2 print-hidden">
-                <button onClick={exportToCSV} className="flex items-center gap-1 text-xs font-semibold text-green-700 border border-green-200 px-2 py-1 rounded"><Download size={14} /> Excel</button>
-                <button onClick={handlePrint} className="flex items-center gap-1 text-xs font-semibold text-blue-700 border border-blue-200 px-2 py-1 rounded"><Printer size={14} /> Print PDF</button>
+                <button onClick={exportToCSV} className="flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-900 border border-green-200 px-2 py-1 rounded"><Download size={14} /> Excel</button>
+                <button onClick={handlePrint} className="flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-900 border border-blue-200 px-2 py-1 rounded"><Printer size={14} /> Print PDF</button>
             </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-xs">
               <thead className="bg-gray-100 text-gray-600 uppercase font-bold print:bg-gray-200 print:text-black print:border-b print:border-black">
                 <tr>
-                  <th className="px-2 py-2 text-left w-[20%]">Item Details</th>
+                  <th className="px-2 py-2 text-left">Item Details</th>
                   <th className="px-2 py-2 text-center bg-yellow-50 print:bg-white">Qty</th>
                   <th className="px-2 py-2 text-center bg-purple-50 print:bg-white">Ctn</th>
                   <th className="px-2 py-2 text-right bg-purple-50 print:bg-white">CBM</th>
@@ -377,20 +412,19 @@ export default function ShipmentSimulator({
                 {calculation.rows.map((row) => (
                   <tr key={row.uniqueId} className={`hover:bg-gray-50 ${row.isLowMargin ? 'bg-red-50' : ''} print:bg-white`}>
                     <td className="px-2 py-2">
+                      <div className="text-[10px] text-gray-500 font-bold">{getSafeName(row, 'brandName')} {getSafeName(row, 'name')}</div>
                       <div className="font-bold text-gray-900">{row.item_code}</div>
-                      <div className="text-[10px] text-gray-500 truncate max-w-[150px]">{row.products?.name}</div>
-                      <div className="text-[9px] text-gray-400">{row.name}</div>
+                      <div className="text-gray-500 truncate max-w-[200px]">{row.name}</div>
                     </td>
                     <td className="px-2 py-2 text-center bg-yellow-50 print:bg-white">
                       <input type="number" value={row.orderQty} onChange={(e) => updateOrderRow(row.uniqueId, 'orderQty', parseInt(e.target.value))} className="w-12 text-center border rounded p-1 bg-white print-hidden" />
                       <span className="hidden print:inline">{row.orderQty}</span>
                     </td>
-                    <td className="px-2 py-2 text-center bg-purple-50 print:bg-white">{row.exactCartons.toFixed(2)}</td>
-                    <td className="px-2 py-2 text-right bg-purple-50 print:bg-white">{row.totalItemCBM.toFixed(3)}</td>
-                    <td className="px-2 py-2 text-right text-gray-500">{row.unitFobUSD > 0 ? row.unitFobUSD.toFixed(2) : '-'}</td>
-                    <td className="px-2 py-2 text-right text-gray-500">{row.unitFobRM.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-center bg-purple-50 print:bg-white font-medium">{row.exactCartons.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-right bg-purple-50 print:bg-white font-medium">{row.totalItemCBM.toFixed(3)}</td>
+                    <td className="px-2 py-2 text-right font-mono text-gray-600">{row.unitFobUSD > 0 ? row.unitFobUSD.toFixed(2) : '-'}</td>
+                    <td className="px-2 py-2 text-right font-mono text-gray-600">{row.unitFobRM.toFixed(2)}</td>
                     <td className="px-2 py-2 text-right font-bold text-blue-700 bg-blue-50 print:bg-white print:text-black">{row.landedCost.toFixed(2)}</td>
-                    
                     <td className="px-2 py-2 bg-green-50 print:bg-white">
                        <div className="flex justify-between gap-1 print-hidden text-[9px] mb-1">
                           <label className="cursor-pointer text-gray-500"><input type="radio" name={`t-${row.uniqueId}`} checked={row.selectedTier==='sell'} onChange={()=>updateOrderRow(row.uniqueId,'selectedTier','sell')}/> S</label>
@@ -400,7 +434,6 @@ export default function ShipmentSimulator({
                        <input type="number" value={row.targetPrice} onChange={(e) => updateOrderRow(row.uniqueId, 'targetPrice', parseFloat(e.target.value))} className="w-full text-right border rounded p-1 bg-white print-hidden font-bold" step="0.01" />
                        <span className="hidden print:block text-right font-bold">{row.targetPrice.toFixed(2)}</span>
                     </td>
-
                     <td className={`px-2 py-2 text-right font-bold bg-green-50 print:bg-white ${row.grossProfit > 0 ? 'text-green-700' : 'text-red-700'}`}>{row.grossProfit.toFixed(2)}</td>
                     <td className="px-2 py-2 text-right font-bold bg-green-50 print:bg-white">{row.margin.toFixed(1)}%</td>
                     <td className="px-2 py-2 text-center print-hidden"><button onClick={() => handleRemove(row.uniqueId)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button></td>
@@ -413,17 +446,22 @@ export default function ShipmentSimulator({
       </div>
 
       {/* --- RIGHT: SIDEBAR (Hidden on Print) --- */}
-      <div className="w-full lg:w-72 bg-white border-l border-gray-200 p-6 flex flex-col gap-6 overflow-y-auto print-hidden">
+      <div className="w-full lg:w-80 bg-white border-l border-gray-200 p-6 flex flex-col gap-6 overflow-y-auto print-hidden">
         <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Truck size={20} /> Logistics & Tax</h2>
         <div className="space-y-4">
-          <div><label className="text-xs font-bold text-blue-800">Exchange Rate</label><input type="number" value={exchangeRate} onChange={e => setExchangeRate(parseFloat(e.target.value))} className="w-full border p-2 rounded" step="0.01" /></div>
-          <div><label className="text-xs font-bold text-gray-500">Ocean & Port</label><input type="number" value={oceanLumpSum} onChange={e => setOceanLumpSum(parseFloat(e.target.value))} className="w-full border p-2 rounded" /></div>
-          <div><label className="text-xs font-bold text-gray-500">Trucking</label><input type="number" value={truckingLumpSum} onChange={e => setTruckingLumpSum(parseFloat(e.target.value))} className="w-full border p-2 rounded" /></div>
-          <div className="flex items-center gap-2 border-t pt-4"><input type="checkbox" checked={isFormE} onChange={e => setIsFormE(e.target.checked)} /><label className="text-xs font-bold">Form E (0% Duty)</label></div>
-          {!isFormE && <div><label className="text-xs text-gray-400">MFN Duty %</label><input type="number" value={manualDutyPct} onChange={e => setManualDutyPct(parseFloat(e.target.value))} className="w-full border p-1" /></div>}
-          <div className="grid grid-cols-2 gap-2 border-t pt-4">
-             <div><label className="text-[10px] font-bold">Consumable</label><input type="number" value={consumable} onChange={e => setConsumable(parseFloat(e.target.value))} className="w-full border p-1" /></div>
-             <div><label className="text-[10px] font-bold">License</label><input type="number" value={license} onChange={e => setLicense(parseFloat(e.target.value))} className="w-full border p-1" /></div>
+          <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
+            <label className="text-xs font-bold text-blue-800 uppercase block mb-1">Exchange Rate (USD)</label>
+            <input type="number" value={exchangeRate} onChange={e => setExchangeRate(parseFloat(e.target.value))} className="w-full text-right font-mono font-bold border-blue-300 rounded p-2 text-lg" step="0.01" />
+          </div>
+          <div><label className="text-xs font-bold text-gray-500 uppercase block mb-1">Ocean & Port (RM)</label><input type="number" value={oceanLumpSum} onChange={e => setOceanLumpSum(parseFloat(e.target.value))} className="w-full border rounded p-2" /></div>
+          <div><label className="text-xs font-bold text-gray-500 uppercase block mb-1">Fwd & Trucking (RM)</label><input type="number" value={truckingLumpSum} onChange={e => setTruckingLumpSum(parseFloat(e.target.value))} className="w-full border rounded p-2" /></div>
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between mb-2"><label className="text-xs font-bold text-gray-500 uppercase">Form E (0% Duty)</label><input type="checkbox" checked={isFormE} onChange={e => setIsFormE(e.target.checked)} className="h-5 w-5 text-blue-600 rounded" /></div>
+            {!isFormE && <div className="mb-2"><label className="text-xs text-gray-400">MFN Duty %</label><input type="number" value={manualDutyPct} onChange={e => setManualDutyPct(parseFloat(e.target.value))} className="w-full border rounded p-1 text-sm" /></div>}
+          </div>
+          <div className="border-t pt-4 grid grid-cols-2 gap-2">
+             <div><label className="text-[10px] font-bold text-gray-500 uppercase">Consumable</label><input type="number" value={consumable} onChange={e => setConsumable(parseFloat(e.target.value))} className="w-full border rounded p-1 text-sm" /></div>
+             <div><label className="text-[10px] font-bold text-gray-500 uppercase">License</label><input type="number" value={license} onChange={e => setLicense(parseFloat(e.target.value))} className="w-full border rounded p-1 text-sm" /></div>
           </div>
         </div>
       </div>
