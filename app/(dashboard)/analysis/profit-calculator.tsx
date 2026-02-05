@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { Plus, Trash2, Box, Download, Truck, Anchor, Save, FolderOpen, Printer } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { Plus, Trash2, Box, Download, Truck, Anchor, Save, FolderOpen, Printer, RefreshCw } from 'lucide-react'
 import { saveScenario, deleteScenario, getScenario } from './actions'
 import { useRouter } from 'next/navigation'
 
@@ -42,6 +42,9 @@ export default function ShipmentSimulator({
   // --- ORDER DRAFT STATE ---
   const [orderItems, setOrderItems] = useState<any[]>([])
 
+  // --- GLOBAL PRICE TIER STATE ---
+  const [globalTier, setGlobalTier] = useState<"sell" | "online" | "proposal">("proposal")
+
   // --- SAVE/LOAD STATE ---
   const [scenarioName, setScenarioName] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -67,19 +70,37 @@ export default function ShipmentSimulator({
   }, [variants, selectedBrand, selectedProduct])
 
   // --- HANDLERS ---
+  
+  // 1. Switch Global Pricing Tier
+  const handleGlobalTierChange = (newTier: "sell" | "online" | "proposal") => {
+    setGlobalTier(newTier)
+    // Update ALL existing items to match the new tier
+    setOrderItems(prev => prev.map(item => {
+        let newPrice = 0
+        if (newTier === 'sell') newPrice = item.origSell
+        else if (newTier === 'online') newPrice = item.origOnline
+        else if (newTier === 'proposal') newPrice = item.origProposal
+        
+        return { ...item, targetPrice: newPrice }
+    }))
+  }
+
+  // 2. Add Item (Uses current Global Tier)
   const handleAddItem = () => {
     const item = variants.find(v => v.id === selectedVariantId)
     if (!item) return
     
-    // Add Item with all price tiers stored
+    // Determine price based on current global setting
+    let initialPrice = item.price_proposal || 0
+    if (globalTier === 'sell') initialPrice = item.price_myr || 0
+    if (globalTier === 'online') initialPrice = item.price_online || 0
+
     setOrderItems(prev => [...prev, { 
       ...item, 
       uniqueId: Math.random(), 
       orderQty: qty,
-      // Default to Proposal Price
-      targetPrice: item.price_proposal || 0,
-      selectedTier: 'proposal', // 'sell', 'online', 'proposal', 'manual'
-      // Store original prices to allow switching back
+      targetPrice: initialPrice,
+      // Store reference prices
       origSell: item.price_myr || 0,
       origOnline: item.price_online || 0,
       origProposal: item.price_proposal || 0
@@ -92,26 +113,9 @@ export default function ShipmentSimulator({
   }
 
   const updateOrderRow = (id: number, field: string, value: any) => {
-    setOrderItems(prev => prev.map(item => {
-      if (item.uniqueId !== id) return item;
-
-      // Special logic for Price Tier switching
-      if (field === 'selectedTier') {
-        let newPrice = item.targetPrice;
-        if (value === 'sell') newPrice = item.origSell;
-        else if (value === 'online') newPrice = item.origOnline;
-        else if (value === 'proposal') newPrice = item.origProposal;
-        
-        return { ...item, selectedTier: value, targetPrice: newPrice };
-      }
-
-      // If user types manually, switch tier to 'manual'
-      if (field === 'targetPrice') {
-         return { ...item, targetPrice: value, selectedTier: 'manual' };
-      }
-
-      return { ...item, [field]: value };
-    }))
+    setOrderItems(prev => prev.map(item => 
+      item.uniqueId === id ? { ...item, [field]: value } : item
+    ))
   }
 
   // --- SAVE / LOAD ACTIONS ---
@@ -119,7 +123,6 @@ export default function ShipmentSimulator({
     if (!scenarioName) return alert("Please enter a name for this draft")
     setIsLoading(true)
     const variables = { exchangeRate, oceanLumpSum, truckingLumpSum, isFormE, manualDutyPct, consumable, license }
-    
     await saveScenario(scenarioName, variables, orderItems)
     setIsLoading(false)
     setScenarioName("")
@@ -131,7 +134,6 @@ export default function ShipmentSimulator({
     if(!confirm("Loading a draft will replace your current work. Continue?")) return
     setIsLoading(true)
     const { scenario, items } = await getScenario(id)
-    
     if (scenario) {
       setExchangeRate(scenario.exchange_rate ?? 4.75)
       setOceanLumpSum(scenario.ocean_lump_sum ?? 5000)
@@ -141,14 +143,8 @@ export default function ShipmentSimulator({
       setConsumable(scenario.consumable ?? 2.00)
       setLicense(scenario.license ?? 0.30)
     }
-
     const loadedItems = (items || []).map((i: any) => ({
-        ...i.variants, 
-        uniqueId: Math.random(),
-        orderQty: i.qty,
-        targetPrice: i.target_price,
-        // Restore price data
-        selectedTier: 'manual', // Default to manual when loading to preserve exact value saved
+        ...i.variants, uniqueId: Math.random(), orderQty: i.qty, targetPrice: i.target_price,
         origSell: i.variants.price_myr || 0,
         origOnline: i.variants.price_online || 0,
         origProposal: i.variants.price_proposal || 0
@@ -265,7 +261,7 @@ export default function ShipmentSimulator({
             </div>
         </div>
 
-        {/* PRINT HEADER */}
+        {/* PRINT ONLY HEADER */}
         <div className="hidden print-visible mb-6">
             <h1 className="text-2xl font-bold uppercase border-b-2 border-black pb-2 mb-2">NEW ORDER ANALYSIS</h1>
             <div className="grid grid-cols-4 gap-4 text-xs text-gray-700 font-mono">
@@ -310,7 +306,7 @@ export default function ShipmentSimulator({
           </div>
         </div>
 
-        {/* Item Selector (Hidden on Print) */}
+        {/* Item Selector */}
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex gap-2 items-end print-hidden">
            <div className="flex-1 grid grid-cols-3 gap-2">
               <div>
@@ -344,10 +340,25 @@ export default function ShipmentSimulator({
            </button>
         </div>
 
-        {/* Main Table */}
+        {/* MAIN TABLE */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden print:border-2 print:border-black">
           <div className="flex justify-between items-center p-3 border-b bg-gray-50 print:bg-white print:border-black">
             <h3 className="font-bold text-gray-700">Shipment Manifest</h3>
+            
+            {/* NEW GLOBAL PRICE SWITCHER */}
+            <div className="flex gap-2 items-center print-hidden bg-gray-100 p-1 rounded-md">
+                <span className="text-xs font-bold text-gray-500 px-2">Set Price:</span>
+                <button onClick={() => handleGlobalTierChange('sell')} className={`px-2 py-1 text-xs rounded ${globalTier === 'sell' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>
+                    SELL
+                </button>
+                <button onClick={() => handleGlobalTierChange('online')} className={`px-2 py-1 text-xs rounded ${globalTier === 'online' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>
+                    ONLINE
+                </button>
+                <button onClick={() => handleGlobalTierChange('proposal')} className={`px-2 py-1 text-xs rounded ${globalTier === 'proposal' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>
+                    PROP
+                </button>
+            </div>
+
             <div className="flex gap-2 print-hidden">
                 <button onClick={exportToCSV} className="flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-900 border border-green-200 px-2 py-1 rounded">
                 <Download size={14} /> Excel
@@ -368,12 +379,7 @@ export default function ShipmentSimulator({
                   <th className="px-3 py-2 text-right">Cost (USD)</th>
                   <th className="px-3 py-2 text-right">FOB (RM)</th>
                   <th className="px-3 py-2 text-right bg-blue-50 print:bg-white">Landed</th>
-                  
-                  {/* PRICE SELECTION COLUMN */}
-                  <th className="px-3 py-2 text-center bg-green-50 print:bg-white w-48">
-                      Target Price (RM)
-                  </th>
-
+                  <th className="px-3 py-2 text-center bg-green-50 print:bg-white">Target</th>
                   <th className="px-3 py-2 text-right bg-green-50 print:bg-white">Profit</th>
                   <th className="px-3 py-2 text-right bg-green-50 print:bg-white">Margin</th>
                   <th className="px-3 py-2 text-center print-hidden">Act</th>
@@ -400,34 +406,16 @@ export default function ShipmentSimulator({
                     <td className="px-3 py-2 text-right font-mono text-gray-600">{row.unitFobUSD > 0 ? row.unitFobUSD.toFixed(2) : '-'}</td>
                     <td className="px-3 py-2 text-right font-mono text-gray-600">{row.unitFobRM.toFixed(2)}</td>
                     <td className="px-3 py-2 text-right font-bold text-blue-700 bg-blue-50 print:bg-white print:text-black">{row.landedCost.toFixed(2)}</td>
-                    
-                    {/* TARGET PRICE WITH RADIO SELECTION */}
-                    <td className="px-3 py-2 bg-green-50 print:bg-white">
-                       <div className="flex flex-col gap-1 print-hidden">
-                          <label className={`text-[10px] cursor-pointer flex items-center gap-1 ${row.selectedTier === 'sell' ? 'font-bold text-black' : 'text-gray-400'}`}>
-                             <input type="radio" name={`tier-${row.uniqueId}`} checked={row.selectedTier === 'sell'} onChange={() => updateOrderRow(row.uniqueId, 'selectedTier', 'sell')} /> 
-                             SELL ({row.origSell.toFixed(2)})
-                          </label>
-                          <label className={`text-[10px] cursor-pointer flex items-center gap-1 ${row.selectedTier === 'online' ? 'font-bold text-black' : 'text-gray-400'}`}>
-                             <input type="radio" name={`tier-${row.uniqueId}`} checked={row.selectedTier === 'online'} onChange={() => updateOrderRow(row.uniqueId, 'selectedTier', 'online')} /> 
-                             ONLINE ({row.origOnline.toFixed(2)})
-                          </label>
-                          <label className={`text-[10px] cursor-pointer flex items-center gap-1 ${row.selectedTier === 'proposal' ? 'font-bold text-black' : 'text-gray-400'}`}>
-                             <input type="radio" name={`tier-${row.uniqueId}`} checked={row.selectedTier === 'proposal'} onChange={() => updateOrderRow(row.uniqueId, 'selectedTier', 'proposal')} /> 
-                             PROP ({row.origProposal.toFixed(2)})
-                          </label>
-                       </div>
-                       
-                       <input 
+                    <td className="px-3 py-2 text-center bg-green-50 print:bg-white">
+                      <input 
                         type="number" 
                         value={row.targetPrice} 
                         onChange={(e) => updateOrderRow(row.uniqueId, 'targetPrice', parseFloat(e.target.value))}
-                        className="w-full text-right border rounded p-1 bg-white mt-1 print-hidden font-bold"
+                        className="w-20 text-right border rounded p-1 bg-white print-hidden"
                         step="0.01"
                       />
-                      <span className="hidden print:block text-center font-bold">{row.targetPrice.toFixed(2)}</span>
+                      <span className="hidden print:inline">{row.targetPrice.toFixed(2)}</span>
                     </td>
-
                     <td className={`px-3 py-2 text-right font-bold bg-green-50 print:bg-white ${row.grossProfit > 0 ? 'text-green-700' : 'text-red-700'}`}>{row.grossProfit.toFixed(2)}</td>
                     <td className="px-3 py-2 text-right font-bold bg-green-50 print:bg-white">
                       <span className={row.isLowMargin ? 'text-red-600' : 'text-green-600'}>{row.margin.toFixed(1)}%</span>
