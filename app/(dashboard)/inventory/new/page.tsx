@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { createItem } from '../actions'
 import { SubmitButton } from './submit-button'
+import { createClient } from '@/utils/supabase/server'
 
 export default async function NewItemPage({
   searchParams,
@@ -9,6 +10,10 @@ export default async function NewItemPage({
   searchParams: Promise<{ error?: string }>
 }) {
   const { error } = await searchParams
+  const supabase = await createClient()
+
+  // Fetch Brands for Datalist (The Dropdown)
+  const { data: brands } = await supabase.from('brands').select('name').order('name')
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -39,11 +44,26 @@ export default async function NewItemPage({
               <label className="block text-sm font-medium text-gray-700">Part No / SKU</label>
               <input name="part_number" placeholder="e.g. 341144" className="form-input" />
             </div>
+            
+            {/* BRAND: COMBO BOX LOGIC */}
             <div>
               <label className="block text-sm font-medium text-gray-700">Brand *</label>
-              <input name="brand" required placeholder="e.g. Proride" className="form-input" />
+              <input 
+                name="brand" 
+                list="brand-list" 
+                required 
+                placeholder="Type or select..." 
+                className="form-input" 
+                autoComplete="off"
+              />
+              <datalist id="brand-list">
+                 {brands?.map(b => (
+                   <option key={b.name} value={b.name} />
+                 ))}
+              </datalist>
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-4">
              <div>
               <label className="block text-sm font-medium text-gray-700">Model Name *</label>
@@ -56,6 +76,8 @@ export default async function NewItemPage({
                 <option value="Coil Spring">Coil Spring</option>
                 <option value="Brake Pad">Brake Pad</option>
                 <option value="Engine Oil">Engine Oil</option>
+                <option value="Filter">Filter</option>
+                <option value="Spare Part">Other</option>
               </select>
             </div>
           </div>

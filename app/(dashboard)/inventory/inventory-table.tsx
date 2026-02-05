@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Pencil, Save, X, Loader2 } from 'lucide-react'
+import { Pencil, Save, X, Loader2, Lock } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { quickUpdateVariant } from './actions'
 
@@ -15,6 +15,9 @@ export default function InventoryTable({
   const router = useRouter()
   const searchParams = useSearchParams()
   const activeBrand = searchParams.get('brand') || 'ALL'
+  
+  // LOGIC: If tab is 'ALL', editing is disabled
+  const isReadOnly = activeBrand === 'ALL'
   
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -130,11 +133,15 @@ export default function InventoryTable({
             </span>
             <div className="text-[9px] text-gray-400 mt-0.5">Ratio: {item.packing_ratio}</div>
         </td>
-        <td className="px-4 py-3 text-center">
-            <button onClick={() => setEditingId(item.id)} className="text-gray-400 hover:text-blue-600 p-1 rounded-full hover:bg-blue-50 transition-all">
-                <Pencil size={16} />
-            </button>
-        </td>
+        
+        {/* EDIT COLUMN (Only visible if not read-only) */}
+        {!isReadOnly && (
+            <td className="px-4 py-3 text-center">
+                <button onClick={() => setEditingId(item.id)} className="text-gray-400 hover:text-blue-600 p-1 rounded-full hover:bg-blue-50 transition-all">
+                    <Pencil size={16} />
+                </button>
+            </td>
+        )}
       </tr>
     )
   }
@@ -175,7 +182,8 @@ export default function InventoryTable({
                         <th className="px-4 py-3 text-right">Online</th>
                         <th className="px-4 py-3 text-right">Prop</th>
                         <th className="px-4 py-3 text-center">Stock</th>
-                        <th className="px-4 py-3 text-center">Edit</th>
+                        {/* Only show Edit Column Header if not read-only */}
+                        {!isReadOnly && <th className="px-4 py-3 text-center">Edit</th>}
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -184,8 +192,8 @@ export default function InventoryTable({
                     ))}
                     {variants.length === 0 && (
                         <tr>
-                            <td colSpan={9} className="px-4 py-12 text-center text-gray-500">
-                                No items found for this brand.
+                            <td colSpan={isReadOnly ? 8 : 9} className="px-4 py-12 text-center text-gray-500">
+                                {isReadOnly ? "No items found." : "No items found for this brand."}
                             </td>
                         </tr>
                     )}

@@ -1,7 +1,7 @@
-import Link from 'next/link'
-import { Plus, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 import InventoryTable from './inventory-table'
+import NewItemButton from './new-item-button' // Import dynamic button
 
 export default async function InventoryPage({
   searchParams,
@@ -32,7 +32,6 @@ export default async function InventoryPage({
         brands (name)
       )
     `)
-    // CHANGED: Sort by Item Code A-Z instead of Created Date
     .order('item_code', { ascending: true })
 
   // Apply Search Filter
@@ -40,9 +39,8 @@ export default async function InventoryPage({
     request = request.or(`item_code.ilike.%${query}%,sku.ilike.%${query}%,part_number.ilike.%${query}%`)
   }
 
-  // Apply Brand Filter (Database side filter for performance)
+  // Apply Brand Filter (Database side filter)
   if (activeBrand !== 'ALL') {
-     // We filter using the search_text column which contains the brand name
      request = request.ilike('search_text', `%${activeBrand}%`)
   }
 
@@ -57,13 +55,9 @@ export default async function InventoryPage({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">Inventory Management</h1>
-        <Link
-          href="/inventory/new"
-          className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 shadow-sm"
-        >
-          <Plus size={16} />
-          Add New Item
-        </Link>
+        
+        {/* Dynamic Add Button */}
+        <NewItemButton />
       </div>
 
       {/* Search Bar */}
