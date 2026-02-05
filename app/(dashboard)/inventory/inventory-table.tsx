@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Pencil, Save, X, Loader2, Lock } from 'lucide-react'
+import { Pencil, Save, X, Loader2, FilePenLine, Trash2 } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { quickUpdateVariant } from './actions'
+import { quickUpdateVariant, deleteItem } from './actions'
+import Link from 'next/link'
 
 export default function InventoryTable({ 
   variants, 
@@ -28,6 +29,16 @@ export default function InventoryTable({
     if (brand === 'ALL') params.delete('brand')
     else params.set('brand', brand)
     router.push(`/inventory?${params.toString()}`)
+  }
+
+  const handleDelete = async (formData: FormData) => {
+    if(!confirm("Are you sure you want to delete this item?")) return
+    
+    try {
+      await deleteItem(formData)
+    } catch (err) {
+      alert("Failed to delete item")
+    }
   }
 
   // --- ROW COMPONENT (Internal) ---
@@ -134,12 +145,26 @@ export default function InventoryTable({
             <div className="text-[9px] text-gray-400 mt-0.5">Ratio: {item.packing_ratio}</div>
         </td>
         
-        {/* EDIT COLUMN (Only visible if not read-only) */}
+        {/* ACTIONS COLUMN (Only visible if not read-only) */}
         {!isReadOnly && (
             <td className="px-4 py-3 text-center">
-                <button onClick={() => setEditingId(item.id)} className="text-gray-400 hover:text-blue-600 p-1 rounded-full hover:bg-blue-50 transition-all">
-                    <Pencil size={16} />
-                </button>
+                <div className="flex items-center justify-center gap-2">
+                    {/* 1. Quick Edit */}
+                    <button onClick={() => setEditingId(item.id)} className="text-gray-400 hover:text-blue-600 p-1 rounded-full hover:bg-blue-50" title="Quick Edit">
+                        <Pencil size={16} />
+                    </button>
+                    {/* 2. Full Edit */}
+                    <Link href={`/inventory/${item.id}`} className="text-gray-400 hover:text-green-600 p-1 rounded-full hover:bg-green-50" title="Full Details">
+                        <FilePenLine size={16} />
+                    </Link>
+                    {/* 3. Delete */}
+                    <form action={handleDelete}>
+                        <input type="hidden" name="id" value={item.id} />
+                        <button className="text-gray-400 hover:text-red-600 p-1 rounded-full hover:bg-red-50" title="Delete Item">
+                            <Trash2 size={16} />
+                        </button>
+                    </form>
+                </div>
             </td>
         )}
       </tr>
@@ -183,7 +208,7 @@ export default function InventoryTable({
                         <th className="px-4 py-3 text-right">Prop</th>
                         <th className="px-4 py-3 text-center">Stock</th>
                         {/* Only show Edit Column Header if not read-only */}
-                        {!isReadOnly && <th className="px-4 py-3 text-center">Edit</th>}
+                        {!isReadOnly && <th className="px-4 py-3 text-center">Actions</th>}
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">

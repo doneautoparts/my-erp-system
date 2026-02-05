@@ -168,7 +168,7 @@ export async function updateItem(formData: FormData) {
   redirect('/inventory')
 }
 
-// --- 3. QUICK INLINE UPDATE (NEW) ---
+// --- 3. QUICK INLINE UPDATE ---
 export async function quickUpdateVariant(formData: FormData) {
   const supabase = await createClient()
   
@@ -187,6 +187,24 @@ export async function quickUpdateVariant(formData: FormData) {
   const { error } = await supabase
     .from('variants')
     .update(updates)
+    .eq('id', id)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  revalidatePath('/inventory')
+  return { success: true }
+}
+
+// --- 4. DELETE ITEM (NEW) ---
+export async function deleteItem(formData: FormData) {
+  const supabase = await createClient()
+  const id = formData.get('id') as string
+
+  const { error } = await supabase
+    .from('variants')
+    .delete()
     .eq('id', id)
 
   if (error) {
