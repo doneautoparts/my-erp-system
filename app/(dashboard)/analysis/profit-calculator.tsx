@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
-import { Plus, Trash2, Box, Download, Truck, Anchor, Save, FolderOpen, Printer, RefreshCw } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Plus, Trash2, Download, Truck, Anchor, Save, FolderOpen, Printer } from 'lucide-react'
 import { saveScenario, deleteScenario, getScenario } from './actions'
 import { useRouter } from 'next/navigation'
 
@@ -24,7 +24,7 @@ export default function ShipmentSimulator({
 }) {
   const router = useRouter()
 
-  // --- LOGISTICS & TAX SCENARIO INPUTS ---
+  // --- VARIABLES ---
   const [exchangeRate, setExchangeRate] = useState(4.75)
   const [oceanLumpSum, setOceanLumpSum] = useState(5000) 
   const [truckingLumpSum, setTruckingLumpSum] = useState(800) 
@@ -33,23 +33,19 @@ export default function ShipmentSimulator({
   const [consumable, setConsumable] = useState(2.00) 
   const [license, setLicense] = useState(0.30) 
 
-  // --- SELECTION STATE ---
+  // --- SELECTION ---
   const [selectedBrand, setSelectedBrand] = useState("")
   const [selectedProduct, setSelectedProduct] = useState("")
   const [selectedVariantId, setSelectedVariantId] = useState("")
   const [qty, setQty] = useState(1)
 
-  // --- ORDER DRAFT STATE ---
+  // --- STATE ---
   const [orderItems, setOrderItems] = useState<any[]>([])
-
-  // --- GLOBAL PRICE TIER STATE ---
   const [globalTier, setGlobalTier] = useState<"sell" | "online" | "proposal">("proposal")
-
-  // --- SAVE/LOAD STATE ---
   const [scenarioName, setScenarioName] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
-  // --- FILTERING LOGIC ---
+  // --- FILTERS ---
   const brands = useMemo(() => {
     const unique = new Set(variants.map(v => v.products?.brands?.name).filter(Boolean))
     return Array.from(unique).sort()
@@ -69,28 +65,22 @@ export default function ShipmentSimulator({
       .sort((a, b) => (a.item_code || '').localeCompare(b.item_code || ''))
   }, [variants, selectedBrand, selectedProduct])
 
-  // --- HANDLERS ---
-  
-  // 1. Switch Global Pricing Tier
+  // --- ACTIONS ---
   const handleGlobalTierChange = (newTier: "sell" | "online" | "proposal") => {
     setGlobalTier(newTier)
-    // Update ALL existing items to match the new tier
     setOrderItems(prev => prev.map(item => {
         let newPrice = 0
         if (newTier === 'sell') newPrice = item.origSell
         else if (newTier === 'online') newPrice = item.origOnline
         else if (newTier === 'proposal') newPrice = item.origProposal
-        
-        return { ...item, targetPrice: newPrice }
+        return { ...item, targetPrice: newPrice, selectedTier: newTier }
     }))
   }
 
-  // 2. Add Item (Uses current Global Tier)
   const handleAddItem = () => {
     const item = variants.find(v => v.id === selectedVariantId)
     if (!item) return
     
-    // Determine price based on current global setting
     let initialPrice = item.price_proposal || 0
     if (globalTier === 'sell') initialPrice = item.price_myr || 0
     if (globalTier === 'online') initialPrice = item.price_online || 0
@@ -100,7 +90,7 @@ export default function ShipmentSimulator({
       uniqueId: Math.random(), 
       orderQty: qty,
       targetPrice: initialPrice,
-      // Store reference prices
+      selectedTier: globalTier,
       origSell: item.price_myr || 0,
       origOnline: item.price_online || 0,
       origProposal: item.price_proposal || 0
@@ -113,12 +103,13 @@ export default function ShipmentSimulator({
   }
 
   const updateOrderRow = (id: number, field: string, value: any) => {
-    setOrderItems(prev => prev.map(item => 
-      item.uniqueId === id ? { ...item, [field]: value } : item
-    ))
+    setOrderItems(prev => prev.map(item => {
+      if (item.uniqueId !== id) return item;
+      if (field === 'targetPrice') return { ...item, targetPrice: value, selectedTier: 'manual' };
+      return { ...item, [field]: value };
+    }))
   }
 
-  // --- SAVE / LOAD ACTIONS ---
   const handleSave = async () => {
     if (!scenarioName) return alert("Please enter a name for this draft")
     setIsLoading(true)
@@ -126,12 +117,12 @@ export default function ShipmentSimulator({
     await saveScenario(scenarioName, variables, orderItems)
     setIsLoading(false)
     setScenarioName("")
-    alert("Draft Saved Successfully!")
+    alert("Draft Saved!")
     router.refresh()
   }
 
   const handleLoad = async (id: string) => {
-    if(!confirm("Loading a draft will replace your current work. Continue?")) return
+    if(!confirm("Load draft? Unsaved changes will be lost.")) return
     setIsLoading(true)
     const { scenario, items } = await getScenario(id)
     if (scenario) {
@@ -145,6 +136,7 @@ export default function ShipmentSimulator({
     }
     const loadedItems = (items || []).map((i: any) => ({
         ...i.variants, uniqueId: Math.random(), orderQty: i.qty, targetPrice: i.target_price,
+        selectedTier: 'manual',
         origSell: i.variants.price_myr || 0,
         origOnline: i.variants.price_online || 0,
         origProposal: i.variants.price_proposal || 0
@@ -153,7 +145,6 @@ export default function ShipmentSimulator({
     setIsLoading(false)
   }
 
-  // --- ENGINE: CALCULATIONS ---
   const calculation = useMemo(() => {
     let totalCBM = 0
     let totalFOB_RM = 0
@@ -211,12 +202,24 @@ export default function ShipmentSimulator({
   }, [orderItems, exchangeRate, oceanLumpSum, truckingLumpSum, isFormE, manualDutyPct, consumable, license])
 
   const exportToCSV = () => {
-    const headers = ["Item Code", "Product", "Qty", "Cartons", "Total CBM", "Cost (USD)", "FOB(RM)", "Landed Cost", "Sell Price", "Profit", "Margin %"]
+    // ADDED BRAND AND MODEL
+    const headers = ["Brand", "Model", "Item Code", "Description", "Qty", "Cartons", "Total CBM", "Cost (USD)", "FOB(RM)", "Landed Cost", "Sell Price", "Profit", "Margin %"]
     const csvRows = [
       headers.join(','),
       ...calculation.rows.map(r => [
-        r.item_code, `"${r.name}"`, r.orderQty, r.exactCartons.toFixed(2), r.totalItemCBM.toFixed(4),
-        r.unitFobUSD.toFixed(2), r.unitFobRM.toFixed(2), r.landedCost.toFixed(2), r.targetPrice.toFixed(2), r.grossProfit.toFixed(2), r.margin.toFixed(2)
+        `"${r.products?.brands?.name || ''}"`,
+        `"${r.products?.name || ''}"`,
+        r.item_code, 
+        `"${r.name}"`, 
+        r.orderQty, 
+        r.exactCartons.toFixed(2), 
+        r.totalItemCBM.toFixed(4),
+        r.unitFobUSD.toFixed(2), 
+        r.unitFobRM.toFixed(2), 
+        r.landedCost.toFixed(2), 
+        r.targetPrice.toFixed(2), 
+        r.grossProfit.toFixed(2), 
+        r.margin.toFixed(2)
       ].join(','))
     ]
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' })
@@ -241,7 +244,7 @@ export default function ShipmentSimulator({
       `}</style>
 
       {/* --- LEFT: MAIN WORKSPACE --- */}
-      <div className="flex-1 space-y-6 print-full-width">
+      <div id="print-area" className="flex-1 space-y-6 print-full-width">
         
         {/* TOP BAR: LOAD / SAVE */}
         <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 flex items-center justify-between print-hidden">
@@ -306,7 +309,7 @@ export default function ShipmentSimulator({
           </div>
         </div>
 
-        {/* Item Selector */}
+        {/* Item Selector (Hidden on Print) */}
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex gap-2 items-end print-hidden">
            <div className="flex-1 grid grid-cols-3 gap-2">
               <div>
@@ -345,7 +348,7 @@ export default function ShipmentSimulator({
           <div className="flex justify-between items-center p-3 border-b bg-gray-50 print:bg-white print:border-black">
             <h3 className="font-bold text-gray-700">Shipment Manifest</h3>
             
-            {/* NEW GLOBAL PRICE SWITCHER */}
+            {/* GLOBAL PRICE SWITCHER */}
             <div className="flex gap-2 items-center print-hidden bg-gray-100 p-1 rounded-md">
                 <span className="text-xs font-bold text-gray-500 px-2">Set Price:</span>
                 <button onClick={() => handleGlobalTierChange('sell')} className={`px-2 py-1 text-xs rounded ${globalTier === 'sell' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>
@@ -389,6 +392,7 @@ export default function ShipmentSimulator({
                 {calculation.rows.map((row) => (
                   <tr key={row.uniqueId} className={`hover:bg-gray-50 ${row.isLowMargin ? 'bg-red-50' : ''} print:bg-white`}>
                     <td className="px-3 py-2">
+                      <div className="text-[10px] text-gray-500 font-bold">{row.products?.brands?.name} {row.products?.name}</div>
                       <div className="font-bold text-gray-900">{row.item_code}</div>
                       <div className="text-gray-500 truncate max-w-[200px]">{row.name}</div>
                     </td>

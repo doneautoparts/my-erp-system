@@ -65,10 +65,10 @@ export default async function DashboardLayout({
             <span>Documents</span>
           </Link>
           
-          {/* NEW ANALYSIS LINK */}
+          {/* UPDATED NAME HERE */}
           <Link href="/analysis" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors">
             <BarChart3 size={20} />
-            <span>Analysis (CBM)</span>
+            <span>Analysis Order</span>
           </Link>
 
           <Link href="/reports" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors">
