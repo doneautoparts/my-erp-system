@@ -32,26 +32,23 @@ export default async function InventoryPage({
         brands (name)
       )
     `)
-    .order('created_at', { ascending: false })
+    // CHANGED: Sort by Item Code A-Z instead of Created Date
+    .order('item_code', { ascending: true })
 
   // Apply Search Filter
   if (query) {
     request = request.or(`item_code.ilike.%${query}%,sku.ilike.%${query}%,part_number.ilike.%${query}%`)
   }
 
-  // Apply Brand Filter (If not ALL)
+  // Apply Brand Filter (Database side filter for performance)
   if (activeBrand !== 'ALL') {
-     // This requires a join filter, but supabase simple client filters on the main table
-     // Since 'variants' doesn't have 'brand_name' directly, we filter in memory or join
-     // To keep it simple and performant, we will search via search_text if we set that up, 
-     // or we use the !inner join syntax which is more complex.
-     // EASIEST WAY: We already have search_text which contains brand name!
+     // We filter using the search_text column which contains the brand name
      request = request.ilike('search_text', `%${activeBrand}%`)
   }
 
   const { data: variants, error } = await request
 
-  // Double check brand filter in memory (in case search_text catches other things)
+  // Double check brand filter in memory (Safety net)
   const filteredVariants = activeBrand === 'ALL' 
     ? variants 
     : variants?.filter((v: any) => v.products?.brands?.name === activeBrand)
