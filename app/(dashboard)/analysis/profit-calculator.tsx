@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, Download, Truck, Anchor, Save, FolderOpen, Printer } from 'lucide-react'
+import { Plus, Trash2, Download, Truck, Anchor, Save, FolderOpen, Printer, RotateCcw } from 'lucide-react'
 import { saveScenario, deleteScenario, getScenario } from './actions'
 import { useRouter } from 'next/navigation'
 
@@ -24,16 +24,22 @@ export default function ShipmentSimulator({
 }) {
   const router = useRouter()
 
-  // --- VARIABLES ---
-  const [exchangeRate, setExchangeRate] = useState(4.75)
-  const [oceanLumpSum, setOceanLumpSum] = useState(5000) 
-  const [truckingLumpSum, setTruckingLumpSum] = useState(800) 
+  // --- LOGISTICS & TAX SCENARIO INPUTS (DEFAULTS) ---
+  const DEFAULT_RATE = 4.75
+  const DEFAULT_OCEAN = 5000
+  const DEFAULT_TRUCK = 800
+  const DEFAULT_CONSUMABLE = 2.00
+  const DEFAULT_LICENSE = 0.30
+
+  const [exchangeRate, setExchangeRate] = useState(DEFAULT_RATE)
+  const [oceanLumpSum, setOceanLumpSum] = useState(DEFAULT_OCEAN) 
+  const [truckingLumpSum, setTruckingLumpSum] = useState(DEFAULT_TRUCK) 
   const [isFormE, setIsFormE] = useState(true) 
   const [manualDutyPct, setManualDutyPct] = useState(10) 
-  const [consumable, setConsumable] = useState(2.00) 
-  const [license, setLicense] = useState(0.30) 
+  const [consumable, setConsumable] = useState(DEFAULT_CONSUMABLE) 
+  const [license, setLicense] = useState(DEFAULT_LICENSE) 
 
-  // --- SELECTION ---
+  // --- SELECTION STATE ---
   const [selectedBrand, setSelectedBrand] = useState("")
   const [selectedProduct, setSelectedProduct] = useState("")
   const [selectedVariantId, setSelectedVariantId] = useState("")
@@ -45,7 +51,7 @@ export default function ShipmentSimulator({
   const [scenarioName, setScenarioName] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
-  // --- FILTERS ---
+  // --- FILTERING LOGIC ---
   const brands = useMemo(() => {
     const unique = new Set(variants.map(v => v.products?.brands?.name).filter(Boolean))
     return Array.from(unique).sort()
@@ -66,6 +72,33 @@ export default function ShipmentSimulator({
   }, [variants, selectedBrand, selectedProduct])
 
   // --- ACTIONS ---
+  
+  // RESET FUNCTION
+  const handleReset = () => {
+    if (orderItems.length > 0) {
+      if (!confirm("Are you sure you want to clear all data and start fresh?")) return
+    }
+    
+    // Reset Data
+    setOrderItems([])
+    setScenarioName("")
+    
+    // Reset Variables to Default
+    setExchangeRate(DEFAULT_RATE)
+    setOceanLumpSum(DEFAULT_OCEAN)
+    setTruckingLumpSum(DEFAULT_TRUCK)
+    setIsFormE(true)
+    setManualDutyPct(10)
+    setConsumable(DEFAULT_CONSUMABLE)
+    setLicense(DEFAULT_LICENSE)
+    
+    // Reset Filters
+    setSelectedBrand("")
+    setSelectedProduct("")
+    setSelectedVariantId("")
+    setQty(1)
+  }
+
   const handleGlobalTierChange = (newTier: "sell" | "online" | "proposal") => {
     setGlobalTier(newTier)
     setOrderItems(prev => prev.map(item => {
@@ -126,13 +159,14 @@ export default function ShipmentSimulator({
     setIsLoading(true)
     const { scenario, items } = await getScenario(id)
     if (scenario) {
-      setExchangeRate(scenario.exchange_rate ?? 4.75)
-      setOceanLumpSum(scenario.ocean_lump_sum ?? 5000)
-      setTruckingLumpSum(scenario.trucking_lump_sum ?? 800)
+      setExchangeRate(scenario.exchange_rate ?? DEFAULT_RATE)
+      setOceanLumpSum(scenario.ocean_lump_sum ?? DEFAULT_OCEAN)
+      setTruckingLumpSum(scenario.trucking_lump_sum ?? DEFAULT_TRUCK)
       setIsFormE(scenario.is_form_e ?? true)
       setManualDutyPct(scenario.manual_duty_pct ?? 10)
-      setConsumable(scenario.consumable ?? 2.00)
-      setLicense(scenario.license ?? 0.30)
+      setConsumable(scenario.consumable ?? DEFAULT_CONSUMABLE)
+      setLicense(scenario.license ?? DEFAULT_LICENSE)
+      setScenarioName(scenario.name) // Set name so user knows what is loaded
     }
     const loadedItems = (items || []).map((i: any) => ({
         ...i.variants, uniqueId: Math.random(), orderQty: i.qty, targetPrice: i.target_price,
@@ -202,7 +236,6 @@ export default function ShipmentSimulator({
   }, [orderItems, exchangeRate, oceanLumpSum, truckingLumpSum, isFormE, manualDutyPct, consumable, license])
 
   const exportToCSV = () => {
-    // ADDED BRAND AND MODEL
     const headers = ["Brand", "Model", "Item Code", "Description", "Qty", "Cartons", "Total CBM", "Cost (USD)", "FOB(RM)", "Landed Cost", "Sell Price", "Profit", "Margin %"]
     const csvRows = [
       headers.join(','),
@@ -247,20 +280,36 @@ export default function ShipmentSimulator({
       <div id="print-area" className="flex-1 space-y-6 print-full-width">
         
         {/* TOP BAR: LOAD / SAVE */}
-        <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 flex items-center justify-between print-hidden">
+        <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 flex flex-wrap items-center justify-between gap-3 print-hidden">
             <div className="flex items-center gap-2">
                 <FolderOpen className="text-gray-500" size={20} />
-                <span className="text-sm font-bold text-gray-700">Saved Drafts:</span>
-                <select className="border rounded text-sm p-1 max-w-[200px]" onChange={(e) => { if(e.target.value) handleLoad(e.target.value) }} defaultValue="">
+                <span className="text-sm font-bold text-gray-700 hidden md:inline">Saved Drafts:</span>
+                <select 
+                    className="border rounded text-sm p-1 max-w-[200px]"
+                    onChange={(e) => { if(e.target.value) handleLoad(e.target.value) }}
+                    defaultValue=""
+                >
                     <option value="" disabled>-- Load a Draft --</option>
                     {savedScenarios.map((s: any) => (
                         <option key={s.id} value={s.id}>{s.name} ({new Date(s.created_at).toLocaleDateString()})</option>
                     ))}
                 </select>
+                {/* NEW RESET BUTTON */}
+                <button onClick={handleReset} className="flex items-center gap-1 bg-gray-100 text-gray-600 px-3 py-1 rounded text-sm hover:bg-gray-200 hover:text-red-600 border border-gray-300 transition-colors" title="Reset / Clear All">
+                    <RotateCcw size={14} /> <span className="hidden md:inline">Reset</span>
+                </button>
             </div>
+            
             <div className="flex items-center gap-2">
-                <input placeholder="Enter Draft Name..." className="border rounded text-sm p-1" value={scenarioName} onChange={(e) => setScenarioName(e.target.value)} />
-                <button onClick={handleSave} disabled={isLoading} className="flex items-center gap-1 bg-gray-800 text-white px-3 py-1 rounded text-sm hover:bg-black"><Save size={14} /> Save Draft</button>
+                <input 
+                    placeholder="Enter Draft Name..." 
+                    className="border rounded text-sm p-1 w-40"
+                    value={scenarioName}
+                    onChange={(e) => setScenarioName(e.target.value)}
+                />
+                <button onClick={handleSave} disabled={isLoading} className="flex items-center gap-1 bg-gray-800 text-white px-3 py-1 rounded text-sm hover:bg-black">
+                    <Save size={14} /> Save
+                </button>
             </div>
         </div>
 
