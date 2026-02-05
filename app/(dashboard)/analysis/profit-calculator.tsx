@@ -131,9 +131,9 @@ export default function ShipmentSimulator({
   const calculation = useMemo(() => {
     let totalCBM = 0
     let totalFOB_RM = 0
-    let totalFOB_USD = 0 // New Tracker
+    let totalFOB_USD = 0 
     let totalExactCartons = 0
-    let totalQty = 0 // New Tracker
+    let totalQty = 0 
 
     const rowsWithVolume = orderItems.map(item => {
       const length = item.ctn_len || 0
@@ -146,7 +146,7 @@ export default function ShipmentSimulator({
       const unitFobUSD = item.cost_usd || 0
       const unitFobRM = unitFobUSD > 0 ? unitFobUSD * exchangeRate : (item.cost_rm || 0)
       const totalItemFobRM = unitFobRM * item.orderQty
-      const totalItemFobUSD = unitFobUSD * item.orderQty // Track USD
+      const totalItemFobUSD = unitFobUSD * item.orderQty 
 
       totalCBM += totalItemCBM
       totalFOB_RM += totalItemFobRM
@@ -154,7 +154,7 @@ export default function ShipmentSimulator({
       totalExactCartons += exactCartons
       totalQty += item.orderQty
 
-      return { ...item, unitCBM, totalItemCBM, unitFobRM, totalItemFobRM, exactCartons }
+      return { ...item, unitCBM, totalItemCBM, unitFobRM, totalItemFobRM, exactCartons, unitFobUSD }
     })
 
     const totalLogisticsLumpSum = oceanLumpSum + truckingLumpSum
@@ -194,11 +194,13 @@ export default function ShipmentSimulator({
   }, [orderItems, exchangeRate, oceanLumpSum, truckingLumpSum, isFormE, manualDutyPct, consumable, license])
 
   const exportToCSV = () => {
-    const headers = ["Item Code", "Product", "Qty", "Cartons", "Total CBM", "FOB(RM)", "Landed Cost", "Sell Price", "Profit", "Margin %"]
+    // ADDED "Cost (USD)" to export
+    const headers = ["Item Code", "Product", "Qty", "Cartons", "Total CBM", "Cost (USD)", "FOB(RM)", "Landed Cost", "Sell Price", "Profit", "Margin %"]
     const csvRows = [
       headers.join(','),
       ...calculation.rows.map(r => [
         r.item_code, `"${r.name}"`, r.orderQty, r.exactCartons.toFixed(2), r.totalItemCBM.toFixed(4),
+        r.unitFobUSD.toFixed(2), // NEW
         r.unitFobRM.toFixed(2), r.landedCost.toFixed(2), r.targetPrice.toFixed(2), r.grossProfit.toFixed(2), r.margin.toFixed(2)
       ].join(','))
     ]
@@ -273,15 +275,11 @@ export default function ShipmentSimulator({
 
         {/* KPI HEADER (6 COLUMNS) */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          
-          {/* 1. TOTAL QTY */}
           <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 print:border-black">
             <p className="text-[10px] font-bold text-gray-500 uppercase">Total Qty</p>
             <h3 className="text-lg font-bold text-gray-800 print:text-black">{formatQty(calculation.totals.qty)}</h3>
             <div className="text-[10px] text-gray-400 mt-1">Pcs/Units</div>
           </div>
-
-          {/* 2. TOTAL VOLUME */}
           <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 print:border-black">
             <p className="text-[10px] font-bold text-gray-500 uppercase">Total Volume</p>
             <h3 className="text-lg font-bold text-indigo-600 print:text-black">{calculation.totals.cbm.toFixed(3)} m³</h3>
@@ -289,8 +287,6 @@ export default function ShipmentSimulator({
               {calculation.totals.cartons.toFixed(1)} Ctns
             </div>
           </div>
-
-          {/* 3. TOTAL FOB */}
           <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 print:border-black">
             <p className="text-[10px] font-bold text-gray-500 uppercase">Total FOB Value</p>
             <h3 className="text-lg font-bold text-blue-700 print:text-black">{formatUSD(calculation.totals.fobUSD)}</h3>
@@ -298,28 +294,21 @@ export default function ShipmentSimulator({
               {formatRM(calculation.totals.fobRM)}
             </div>
           </div>
-
-          {/* 4. TOTAL LOGISTICS */}
           <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 print:border-black">
             <p className="text-[10px] font-bold text-gray-500 uppercase">Total Logistics</p>
             <h3 className="text-lg font-bold text-orange-600 print:text-black">{formatRM(calculation.totals.logistics)}</h3>
             <div className="text-[10px] text-gray-400 mt-1">Ocean + Trucking</div>
           </div>
-
-          {/* 5. TAX PAYABLE */}
           <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 print:border-black">
             <p className="text-[10px] font-bold text-gray-500 uppercase">Tax Payable (SST)</p>
             <h3 className="text-lg font-bold text-red-600 print:text-black">{formatRM(calculation.totals.sst)}</h3>
             <div className="text-[10px] text-gray-400 mt-1">10% on Value+Logs</div>
           </div>
-
-          {/* 6. TOTAL CASH OUTLAY */}
           <div className="bg-gray-800 p-3 rounded-lg shadow-sm border border-gray-900 text-white print:bg-white print:text-black print:border-black">
             <p className="text-[10px] font-bold text-gray-400 uppercase print:text-gray-600">Total Cash Outlay</p>
             <h3 className="text-xl font-bold">{formatRM(calculation.totals.cashOutlay)}</h3>
             <div className="text-[10px] text-gray-400 mt-1 print:text-gray-500">All Inclusive</div>
           </div>
-
         </div>
 
         {/* Item Selector (Hidden on Print) */}
@@ -377,6 +366,10 @@ export default function ShipmentSimulator({
                   <th className="px-3 py-2 text-center bg-yellow-50 print:bg-white">Qty</th>
                   <th className="px-3 py-2 text-center bg-purple-50 print:bg-white">Ctn</th>
                   <th className="px-3 py-2 text-right bg-purple-50 print:bg-white">CBM</th>
+                  
+                  {/* NEW COLUMN */}
+                  <th className="px-3 py-2 text-right">Cost (USD)</th>
+                  
                   <th className="px-3 py-2 text-right">FOB (RM)</th>
                   <th className="px-3 py-2 text-right bg-blue-50 print:bg-white">Landed</th>
                   <th className="px-3 py-2 text-center bg-green-50 print:bg-white">Target</th>
@@ -406,6 +399,11 @@ export default function ShipmentSimulator({
                     </td>
                     <td className="px-3 py-2 text-right bg-purple-50 print:bg-white font-medium">
                       {row.totalItemCBM.toFixed(3)}
+                    </td>
+
+                    {/* NEW DATA CELL */}
+                    <td className="px-3 py-2 text-right font-mono text-gray-600">
+                      {row.unitFobUSD > 0 ? row.unitFobUSD.toFixed(2) : '-'}
                     </td>
 
                     <td className="px-3 py-2 text-right font-mono text-gray-600">
