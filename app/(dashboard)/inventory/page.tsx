@@ -1,17 +1,27 @@
 import Link from 'next/link'
-import { Plus, Search, Pencil } from 'lucide-react'
+import { Plus, Search } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
+import InventoryTable from './inventory-table'
 
 export default async function InventoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string, brand?: string }>
 }) {
   const supabase = await createClient()
-  const { q } = await searchParams
+  const { q, brand } = await searchParams
   const query = q || ''
+  const activeBrand = brand || 'ALL'
 
-  // Fetch variants joined with products and brands
+  // 1. Fetch Unique Brands for Tabs
+  const { data: brandsData } = await supabase
+    .from('brands')
+    .select('name')
+    .order('name')
+  
+  const brands = brandsData?.map(b => b.name) || []
+
+  // 2. Build Inventory Query
   let request = supabase
     .from('variants')
     .select(`
@@ -24,24 +34,35 @@ export default async function InventoryPage({
     `)
     .order('created_at', { ascending: false })
 
-  // NEW: Search the "search_text" column which contains Brand + Model + Code
+  // Apply Search Filter
   if (query) {
-    request = request.ilike('search_text', `%${query}%`)
+    request = request.or(`item_code.ilike.%${query}%,sku.ilike.%${query}%,part_number.ilike.%${query}%`)
+  }
+
+  // Apply Brand Filter (If not ALL)
+  if (activeBrand !== 'ALL') {
+     // This requires a join filter, but supabase simple client filters on the main table
+     // Since 'variants' doesn't have 'brand_name' directly, we filter in memory or join
+     // To keep it simple and performant, we will search via search_text if we set that up, 
+     // or we use the !inner join syntax which is more complex.
+     // EASIEST WAY: We already have search_text which contains brand name!
+     request = request.ilike('search_text', `%${activeBrand}%`)
   }
 
   const { data: variants, error } = await request
 
-  if (error) {
-    console.error('Error fetching inventory:', error)
-  }
+  // Double check brand filter in memory (in case search_text catches other things)
+  const filteredVariants = activeBrand === 'ALL' 
+    ? variants 
+    : variants?.filter((v: any) => v.products?.brands?.name === activeBrand)
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Inventory</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Inventory Management</h1>
         <Link
           href="/inventory/new"
-          className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+          className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 shadow-sm"
         >
           <Plus size={16} />
           Add New Item
@@ -49,77 +70,25 @@ export default async function InventoryPage({
       </div>
 
       {/* Search Bar */}
-      <div className="relative">
+      <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         <form>
+           {/* Keep current brand when searching */}
+           {activeBrand !== 'ALL' && <input type="hidden" name="brand" value={activeBrand} />}
            <input
             name="q"
             defaultValue={query}
-            placeholder="Search Model (Wira), Brand (Proride), Code..."
-            className="w-full rounded-md border-0 py-2.5 pl-10 pr-4 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-600"
+            placeholder="Search Code, SKU or Model..."
+            className="w-full rounded-md border-0 py-2.5 pl-10 pr-4 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-600 shadow-sm"
           />
         </form>
       </div>
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item Code</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product Info</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pos / Type</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Sell (RM)</th>
-              <th className="relative px-6 py-3">
-                <span className="sr-only">Edit</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {variants?.map((item: any) => (
-              <tr key={item.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                   <div className="font-bold text-blue-900">{item.item_code || '-'}</div>
-                   <div className="text-xs text-gray-500 font-mono">{item.part_number}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="font-medium text-gray-900">{item.products?.name}</div>
-                  <div className="text-xs text-gray-500">{item.products?.brands?.name}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <div>{item.position || '-'}</div>
-                  <div className="text-xs text-gray-400">{item.type || '-'}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right">
-                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                    item.stock_quantity <= item.min_stock_level 
-                      ? 'bg-red-100 text-red-800' 
-                      : 'bg-green-100 text-green-800'
-                  }`}>
-                    {item.stock_quantity}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                  {item.price_myr?.toFixed(2)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <Link href={`/inventory/${item.id}`} className="text-gray-400 hover:text-blue-600">
-                    <Pencil size={18} />
-                  </Link>
-                </td>
-              </tr>
-            ))}
-            {variants?.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                  {query ? `No items matching "${query}"` : 'No items found.'}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* The Smart Table Component */}
+      <InventoryTable 
+        variants={filteredVariants || []} 
+        brands={brands} 
+      />
     </div>
   )
 }

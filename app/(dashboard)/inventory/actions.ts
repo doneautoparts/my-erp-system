@@ -8,41 +8,34 @@ import { redirect } from 'next/navigation'
 export async function createItem(formData: FormData) {
   const supabase = await createClient()
 
-  // Extract Data
   const brandName = formData.get('brand') as string
   const productName = formData.get('product_name') as string
   const category = formData.get('category') as string
-  
   const itemCode = formData.get('item_code') as string
   const position = formData.get('position') as string
   const type = formData.get('type') as string
   const partNumber = formData.get('part_number') as string
   const sku = formData.get('sku') as string || itemCode || partNumber
   
-  // Costs & Prices
   const costRm = parseFloat(formData.get('cost_rm') as string) || 0
   const costUsd = parseFloat(formData.get('cost_usd') as string) || 0
   const priceSell = parseFloat(formData.get('price_sell') as string) || 0
   const priceOnline = parseFloat(formData.get('price_online') as string) || 0
   const priceProposal = parseFloat(formData.get('price_proposal') as string) || 0
   
-  // Stock Logic
   const stock = parseInt(formData.get('stock') as string) || 0
   const minStock = parseInt(formData.get('min_stock') as string) || 5
   const packingRatio = parseInt(formData.get('packing_ratio') as string) || 1
 
-  // NEW: Packaging / CBM Data
   const ctnQty = parseInt(formData.get('ctn_qty') as string) || 1
   const ctnLen = parseFloat(formData.get('ctn_len') as string) || 0
   const ctnWid = parseFloat(formData.get('ctn_wid') as string) || 0
   const ctnHeight = parseFloat(formData.get('ctn_height') as string) || 0
 
-  // Generate Name
   let variantName = [position, type].filter(Boolean).join(' - ')
   if (!variantName) variantName = 'Standard'
 
   try {
-    // Handle Brand
     const { data: existingBrand } = await supabase.from('brands').select('id').ilike('name', brandName.trim()).single()
     let brandId = existingBrand?.id
 
@@ -52,7 +45,6 @@ export async function createItem(formData: FormData) {
       brandId = newBrand.id
     }
 
-    // Handle Product
     const { data: existingProduct } = await supabase.from('products').select('id').eq('brand_id', brandId).ilike('name', productName.trim()).single()
     let productId = existingProduct?.id
 
@@ -62,7 +54,6 @@ export async function createItem(formData: FormData) {
       productId = newProduct.id
     }
 
-    // Create Variant
     const { error: variantError } = await supabase.from('variants').insert({
         product_id: productId,
         item_code: itemCode,
@@ -79,7 +70,6 @@ export async function createItem(formData: FormData) {
         stock_quantity: stock,
         min_stock_level: minStock,
         packing_ratio: packingRatio,
-        // NEW FIELDS
         ctn_qty: ctnQty,
         ctn_len: ctnLen,
         ctn_wid: ctnWid,
@@ -96,14 +86,13 @@ export async function createItem(formData: FormData) {
   redirect('/inventory')
 }
 
-// --- 2. UPDATE EXISTING ITEM ---
+// --- 2. UPDATE EXISTING ITEM (Full Edit) ---
 export async function updateItem(formData: FormData) {
   const supabase = await createClient()
 
   const variantId = formData.get('id') as string
   const oldProductId = formData.get('product_id') as string
 
-  // Extract Data
   const productName = (formData.get('product_name') as string).trim()
   const category = formData.get('category') as string
   const itemCode = formData.get('item_code') as string
@@ -122,7 +111,6 @@ export async function updateItem(formData: FormData) {
   const minStock = parseInt(formData.get('min_stock') as string) || 5
   const packingRatio = parseInt(formData.get('packing_ratio') as string) || 1
 
-  // NEW: Packaging / CBM Data
   const ctnQty = parseInt(formData.get('ctn_qty') as string) || 1
   const ctnLen = parseFloat(formData.get('ctn_len') as string) || 0
   const ctnWid = parseFloat(formData.get('ctn_wid') as string) || 0
@@ -132,7 +120,6 @@ export async function updateItem(formData: FormData) {
   if (!variantName) variantName = 'Standard'
 
   try {
-    // Check if Product Name Changed logic
     const { data: currentProduct } = await supabase.from('products').select('name, brand_id').eq('id', oldProductId).single();
     let targetProductId = oldProductId;
 
@@ -149,7 +136,6 @@ export async function updateItem(formData: FormData) {
         await supabase.from('products').update({ category }).eq('id', targetProductId);
     }
 
-    // Update Variant
     const { error: variantError } = await supabase.from('variants').update({
         product_id: targetProductId,
         item_code: itemCode,
@@ -166,7 +152,6 @@ export async function updateItem(formData: FormData) {
         stock_quantity: stock,
         min_stock_level: minStock,
         packing_ratio: packingRatio,
-        // NEW FIELDS
         ctn_qty: ctnQty,
         ctn_len: ctnLen,
         ctn_wid: ctnWid,
@@ -181,4 +166,33 @@ export async function updateItem(formData: FormData) {
 
   revalidatePath('/inventory')
   redirect('/inventory')
+}
+
+// --- 3. QUICK INLINE UPDATE (NEW) ---
+export async function quickUpdateVariant(formData: FormData) {
+  const supabase = await createClient()
+  
+  const id = formData.get('id') as string
+  const updates = {
+    cost_usd: parseFloat(formData.get('cost_usd') as string) || 0,
+    cost_rm: parseFloat(formData.get('cost_rm') as string) || 0,
+    price_myr: parseFloat(formData.get('price_sell') as string) || 0,
+    price_online: parseFloat(formData.get('price_online') as string) || 0,
+    price_proposal: parseFloat(formData.get('price_proposal') as string) || 0,
+    stock_quantity: parseInt(formData.get('stock') as string) || 0,
+    packing_ratio: parseInt(formData.get('packing_ratio') as string) || 1,
+    item_code: formData.get('item_code') as string
+  }
+
+  const { error } = await supabase
+    .from('variants')
+    .update(updates)
+    .eq('id', id)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  revalidatePath('/inventory')
+  return { success: true }
 }
