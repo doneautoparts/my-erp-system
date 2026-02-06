@@ -1,21 +1,21 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, Box, Download, Truck, Anchor, Save, FolderOpen, Printer, RotateCcw } from 'lucide-react'
+import { Plus, Trash2, Download, Truck, Anchor, Save, FolderOpen, Printer, RotateCcw } from 'lucide-react'
 import { saveScenario, deleteScenario, getScenario } from './actions'
 import { useRouter } from 'next/navigation'
 
 // Helper for currency formatting
-const formatRM = (val: number) => 
-  new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR' }).format(val)
+const formatRM = (val: number | undefined) => 
+  new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR' }).format(val || 0)
 
-const formatUSD = (val: number) => 
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val)
+const formatUSD = (val: number | undefined) => 
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val || 0)
 
-const formatQty = (val: number) => 
-  new Intl.NumberFormat('en-US').format(val)
+const formatQty = (val: number | undefined) => 
+  new Intl.NumberFormat('en-US').format(val || 0)
 
-// Helper to safely get Product/Brand name whether it's an object or array
+// Helper to safely get Product/Brand name
 const getSafeName = (obj: any, field: 'name' | 'brandName') => {
   if (!obj) return ''
   const product = Array.isArray(obj.products) ? obj.products[0] : obj.products
@@ -66,32 +66,33 @@ export default function ShipmentSimulator({
   const [isLoading, setIsLoading] = useState(false)
 
   // --- SAFE FILTERS ---
+  const safeVariants = Array.isArray(variants) ? variants : []
+
   const brands = useMemo(() => {
-    // FIX: Use helper to safely get brand name
-    const unique = new Set(variants.map(v => getSafeName(v, 'brandName')).filter(Boolean))
+    const unique = new Set(safeVariants.map(v => getSafeName(v, 'brandName')).filter(Boolean))
     return Array.from(unique).sort()
-  }, [variants])
+  }, [safeVariants])
 
   const products = useMemo(() => {
     if (!selectedBrand) return []
-    const filtered = variants.filter(v => getSafeName(v, 'brandName') === selectedBrand)
+    const filtered = safeVariants.filter(v => getSafeName(v, 'brandName') === selectedBrand)
     const unique = new Set(filtered.map(v => getSafeName(v, 'name')).filter(Boolean))
     return Array.from(unique).sort()
-  }, [variants, selectedBrand])
+  }, [safeVariants, selectedBrand])
 
   const filteredVariants = useMemo(() => {
     if (!selectedProduct) return []
-    return variants
+    return safeVariants
       .filter(v => 
         getSafeName(v, 'brandName') === selectedBrand && 
         getSafeName(v, 'name') === selectedProduct
       )
       .sort((a, b) => (a.item_code || '').localeCompare(b.item_code || ''))
-  }, [variants, selectedBrand, selectedProduct])
+  }, [safeVariants, selectedBrand, selectedProduct])
 
   // --- HANDLERS ---
   const handleAddItem = () => {
-    const item = variants.find(v => v.id === selectedVariantId)
+    const item = safeVariants.find(v => v.id === selectedVariantId)
     if (!item) return
     
     let initialPrice = item.price_proposal || 0
@@ -130,17 +131,6 @@ export default function ShipmentSimulator({
     }))
   }
 
-  const handleGlobalTierChange = (newTier: "sell" | "online" | "proposal") => {
-    setGlobalTier(newTier)
-    setOrderItems(prev => prev.map(item => {
-        let newPrice = 0
-        if (newTier === 'sell') newPrice = item.origSell
-        else if (newTier === 'online') newPrice = item.origOnline
-        else if (newTier === 'proposal') newPrice = item.origProposal
-        return { ...item, targetPrice: newPrice, selectedTier: newTier }
-    }))
-  }
-
   const handleReset = () => {
     if (orderItems.length > 0 && !confirm("Clear all data?")) return
     setOrderItems([]); setScenarioName(""); setExchangeRate(DEFAULT_RATE); setOceanLumpSum(5000); setTruckingLumpSum(800); setIsFormE(true); setManualDutyPct(10); setConsumable(2.00); setLicense(0.30);
@@ -164,34 +154,40 @@ export default function ShipmentSimulator({
     }
     const loadedItems = (items || []).map((i: any) => ({
         ...i.variants, uniqueId: Math.random(), orderQty: i.qty, targetPrice: i.target_price,
-        selectedTier: 'manual', origSell: i.variants.price_myr||0, origOnline: i.variants.price_online||0, origProposal: i.variants.price_proposal||0
+        selectedTier: 'manual', origSell: i.variants?.price_myr||0, origOnline: i.variants?.price_online||0, origProposal: i.variants?.price_proposal||0
     }))
     setOrderItems(loadedItems)
     setIsLoading(false)
   }
 
-  // --- CALCULATIONS ---
+  // --- ENGINE: CALCULATIONS (CRASH PROOFED) ---
   const calculation = useMemo(() => {
     let totalCBM = 0, totalFOB_RM = 0, totalFOB_USD = 0, totalExactCartons = 0, totalQty = 0
 
     const rowsWithVolume = orderItems.map(item => {
-      const length = item.ctn_len || 0
-      const width = item.ctn_wid || 0
-      const height = item.ctn_height || 0
-      const pcsPerCtn = item.ctn_qty || 1
-      const exactCartons = item.orderQty / pcsPerCtn
-      const unitCBM = (length * width * height > 0) ? ((length * width * height) / 1000000) / pcsPerCtn : 0
-      const totalItemCBM = unitCBM * item.orderQty
-      const unitFobUSD = item.cost_usd || 0
-      const unitFobRM = unitFobUSD > 0 ? unitFobUSD * exchangeRate : (item.cost_rm || 0)
-      
-      totalCBM += totalItemCBM
-      totalFOB_RM += unitFobRM * item.orderQty
-      totalFOB_USD += unitFobUSD * item.orderQty
-      totalExactCartons += item.orderQty / (item.ctn_qty || 1)
-      totalQty += item.orderQty
+      // Safety Checks
+      const safeItem = item || {}
+      const length = safeItem.ctn_len || 0
+      const width = safeItem.ctn_wid || 0
+      const height = safeItem.ctn_height || 0
+      const pcsPerCtn = safeItem.ctn_qty || 1
+      const itemQty = safeItem.orderQty || 0
 
-      return { ...item, unitCBM, totalItemCBM, unitFobRM, unitFobUSD }
+      const exactCartons = itemQty / pcsPerCtn
+      const unitCBM = (length * width * height > 0) ? ((length * width * height) / 1000000) / pcsPerCtn : 0
+      const totalItemCBM = unitCBM * itemQty
+      const unitFobUSD = safeItem.cost_usd || 0
+      const unitFobRM = unitFobUSD > 0 ? unitFobUSD * exchangeRate : (safeItem.cost_rm || 0)
+      const totalItemFobRM = unitFobRM * itemQty
+      const totalItemFobUSD = unitFobUSD * itemQty 
+
+      totalCBM += totalItemCBM
+      totalFOB_RM += totalItemFobRM
+      totalFOB_USD += totalItemFobUSD
+      totalExactCartons += exactCartons
+      totalQty += itemQty
+
+      return { ...safeItem, unitCBM, totalItemCBM, unitFobRM, totalItemFobRM, exactCartons, unitFobUSD }
     })
 
     const totalLogisticsLumpSum = oceanLumpSum + truckingLumpSum
@@ -202,12 +198,12 @@ export default function ShipmentSimulator({
     const finalRows = rowsWithVolume.map(item => {
       const cbmShare = totalCBM > 0 ? (item.totalItemCBM / totalCBM) : 0
       const allocatedLogistics = (item.orderQty > 0) ? (cbmShare * totalLogisticsLumpSum) / item.orderQty : 0
-      const valueShare = totalFOB_RM > 0 ? (item.unitFobRM * item.orderQty / totalFOB_RM) : 0
+      const valueShare = totalFOB_RM > 0 ? (item.totalItemFobRM / totalFOB_RM) : 0
       const allocatedSST = (item.orderQty > 0) ? (valueShare * totalSST) / item.orderQty : 0
       const unitDuty = item.unitFobRM * dutyRate
       const landedCost = item.unitFobRM + allocatedLogistics + unitDuty + allocatedSST + consumable + license
-      const grossProfit = item.targetPrice - landedCost
-      const margin = item.targetPrice > 0 ? (grossProfit / item.targetPrice) * 100 : 0
+      const grossProfit = (item.targetPrice || 0) - landedCost
+      const margin = (item.targetPrice || 0) > 0 ? (grossProfit / item.targetPrice) * 100 : 0
 
       return { ...item, landedCost, grossProfit, margin, isLowMargin: margin < 20 }
     })
@@ -225,10 +221,17 @@ export default function ShipmentSimulator({
       ...calculation.rows.map(r => [
         `"${getSafeName(r, 'brandName')}"`, 
         `"${getSafeName(r, 'name')}"`, 
-        r.item_code, 
-        `"${r.name}"`, 
-        r.orderQty, (r.orderQty / (r.ctn_qty||1)).toFixed(2), r.totalItemCBM.toFixed(4),
-        r.unitFobUSD.toFixed(2), r.unitFobRM.toFixed(2), r.landedCost.toFixed(2), r.targetPrice.toFixed(2), r.grossProfit.toFixed(2), r.margin.toFixed(2)
+        r.item_code || '', 
+        `"${r.name || ''}"`, 
+        r.orderQty || 0, 
+        (r.exactCartons || 0).toFixed(2), 
+        (r.totalItemCBM || 0).toFixed(4),
+        (r.unitFobUSD || 0).toFixed(2), 
+        (r.unitFobRM || 0).toFixed(2), 
+        (r.landedCost || 0).toFixed(2), 
+        (r.targetPrice || 0).toFixed(2), 
+        (r.grossProfit || 0).toFixed(2), 
+        (r.margin || 0).toFixed(2)
       ].join(','))
     ]
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' })
@@ -267,7 +270,9 @@ export default function ShipmentSimulator({
                 <FolderOpen className="text-gray-500" size={20} />
                 <select className="border rounded text-sm p-1 max-w-[200px]" onChange={(e) => { if(e.target.value) handleLoad(e.target.value) }} defaultValue="">
                     <option value="" disabled>-- Load Draft --</option>
-                    {savedScenarios.map((s: any) => <option key={s.id} value={s.id}>{s.name} ({new Date(s.created_at).toLocaleDateString()})</option>)}
+                    {(savedScenarios || []).map((s: any) => (
+                        <option key={s.id} value={s.id}>{s.name} ({new Date(s.created_at).toLocaleDateString()})</option>
+                    ))}
                 </select>
                 <button onClick={handleReset} className="flex items-center gap-1 bg-gray-100 text-gray-600 px-3 py-1 rounded text-sm hover:text-red-600 border border-gray-300"><RotateCcw size={14} /> Reset</button>
             </div>
@@ -288,7 +293,7 @@ export default function ShipmentSimulator({
             </div>
         </div>
 
-        {/* KPI HEADER (6 COLUMNS) */}
+        {/* KPI HEADER */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden print:border-2 print:border-black mb-6">
           <table className="min-w-full text-sm">
              <thead className="bg-gray-100 text-gray-700 uppercase font-bold text-xs border-b border-gray-300 print:bg-gray-200 print:text-black">
@@ -309,7 +314,7 @@ export default function ShipmentSimulator({
                       {formatQty(calculation.totals.qty)}
                    </td>
                    <td className="px-2 py-2 border-r text-center">
-                      <div className="font-bold text-lg text-indigo-700 print:text-black">{calculation.totals.cbm.toFixed(2)} m³</div>
+                      <div className="font-bold text-lg text-indigo-700 print:text-black">{(calculation.totals.cbm || 0).toFixed(2)} m³</div>
                    </td>
                    <td className="px-2 py-2 border-r text-right">
                       <div className="font-bold text-blue-700 print:text-black">{formatUSD(calculation.totals.fobUSD)}</div>
@@ -324,7 +329,7 @@ export default function ShipmentSimulator({
                    </td>
                    <td className="px-2 py-2 border-r text-center text-xs text-gray-500">Units</td>
                    <td className="px-2 py-2 border-r text-center text-xs text-gray-500">
-                      {calculation.totals.cartons.toFixed(1)} Ctns
+                      {(calculation.totals.cartons || 0).toFixed(1)} Ctns
                    </td>
                    <td className="px-2 py-2 border-r text-right font-semibold text-gray-700">
                       {formatRM(calculation.totals.fobRM)}
@@ -381,7 +386,7 @@ export default function ShipmentSimulator({
           <div className="flex justify-between items-center p-3 border-b bg-gray-50 print:bg-white print:border-black">
             <h3 className="font-bold text-gray-700">Shipment Manifest</h3>
             <div className="flex gap-2 items-center print-hidden bg-gray-100 p-1 rounded-md">
-                <span className="text-xs font-bold text-gray-500 px-2">Set Price:</span>
+                <span className="text-xs font-bold text-gray-500 px-2">Global Price:</span>
                 <button onClick={() => handleGlobalTierChange('sell')} className={`px-2 py-1 text-xs rounded ${globalTier === 'sell' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500'}`}>SELL</button>
                 <button onClick={() => handleGlobalTierChange('online')} className={`px-2 py-1 text-xs rounded ${globalTier === 'online' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500'}`}>ONLINE</button>
                 <button onClick={() => handleGlobalTierChange('proposal')} className={`px-2 py-1 text-xs rounded ${globalTier === 'proposal' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500'}`}>PROP</button>
@@ -420,11 +425,12 @@ export default function ShipmentSimulator({
                       <input type="number" value={row.orderQty} onChange={(e) => updateOrderRow(row.uniqueId, 'orderQty', parseInt(e.target.value))} className="w-12 text-center border rounded p-1 bg-white print-hidden" />
                       <span className="hidden print:inline">{row.orderQty}</span>
                     </td>
-                    <td className="px-2 py-2 text-center bg-purple-50 print:bg-white font-medium">{row.exactCartons.toFixed(2)}</td>
-                    <td className="px-2 py-2 text-right bg-purple-50 print:bg-white font-medium">{row.totalItemCBM.toFixed(3)}</td>
-                    <td className="px-2 py-2 text-right font-mono text-gray-600">{row.unitFobUSD > 0 ? row.unitFobUSD.toFixed(2) : '-'}</td>
-                    <td className="px-2 py-2 text-right font-mono text-gray-600">{row.unitFobRM.toFixed(2)}</td>
-                    <td className="px-2 py-2 text-right font-bold text-blue-700 bg-blue-50 print:bg-white print:text-black">{row.landedCost.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-center bg-purple-50 print:bg-white font-medium">{(row.exactCartons || 0).toFixed(2)}</td>
+                    <td className="px-2 py-2 text-right bg-purple-50 print:bg-white font-medium">{(row.totalItemCBM || 0).toFixed(3)}</td>
+                    <td className="px-2 py-2 text-right font-mono text-gray-600">{(row.unitFobUSD || 0) > 0 ? (row.unitFobUSD || 0).toFixed(2) : '-'}</td>
+                    <td className="px-2 py-2 text-right font-mono text-gray-600">{(row.unitFobRM || 0).toFixed(2)}</td>
+                    <td className="px-2 py-2 text-right font-bold text-blue-700 bg-blue-50 print:bg-white print:text-black">{(row.landedCost || 0).toFixed(2)}</td>
+                    
                     <td className="px-2 py-2 bg-green-50 print:bg-white">
                        <div className="flex justify-between gap-1 print-hidden text-[9px] mb-1">
                           <label className="cursor-pointer text-gray-500"><input type="radio" name={`t-${row.uniqueId}`} checked={row.selectedTier==='sell'} onChange={()=>updateOrderRow(row.uniqueId,'selectedTier','sell')}/> S</label>
@@ -432,10 +438,11 @@ export default function ShipmentSimulator({
                           <label className="cursor-pointer text-gray-500"><input type="radio" name={`t-${row.uniqueId}`} checked={row.selectedTier==='proposal'} onChange={()=>updateOrderRow(row.uniqueId,'selectedTier','proposal')}/> P</label>
                        </div>
                        <input type="number" value={row.targetPrice} onChange={(e) => updateOrderRow(row.uniqueId, 'targetPrice', parseFloat(e.target.value))} className="w-full text-right border rounded p-1 bg-white print-hidden font-bold" step="0.01" />
-                       <span className="hidden print:block text-right font-bold">{row.targetPrice.toFixed(2)}</span>
+                       <span className="hidden print:block text-right font-bold">{(row.targetPrice || 0).toFixed(2)}</span>
                     </td>
-                    <td className={`px-2 py-2 text-right font-bold bg-green-50 print:bg-white ${row.grossProfit > 0 ? 'text-green-700' : 'text-red-700'}`}>{row.grossProfit.toFixed(2)}</td>
-                    <td className="px-2 py-2 text-right font-bold bg-green-50 print:bg-white">{row.margin.toFixed(1)}%</td>
+
+                    <td className={`px-2 py-2 text-right font-bold bg-green-50 print:bg-white ${(row.grossProfit || 0) > 0 ? 'text-green-700' : 'text-red-700'}`}>{(row.grossProfit || 0).toFixed(2)}</td>
+                    <td className="px-2 py-2 text-right font-bold bg-green-50 print:bg-white">{(row.margin || 0).toFixed(1)}%</td>
                     <td className="px-2 py-2 text-center print-hidden"><button onClick={() => handleRemove(row.uniqueId)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button></td>
                   </tr>
                 ))}
