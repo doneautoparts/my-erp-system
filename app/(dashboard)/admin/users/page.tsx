@@ -42,7 +42,7 @@ export default async function UserManagementPage({
           <Shield size={24} />
         </div>
         <div>
-           <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
+           <h1 className="text-2xl font-bold text-gray-900">User Administration</h1>
            <p className="text-sm text-gray-500">Manage access levels (Admin / Manager / User)</p>
         </div>
       </div>
