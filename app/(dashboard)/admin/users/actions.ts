@@ -20,14 +20,8 @@ export async function createUser(formData: FormData) {
       throw new Error("Unauthorized: Only Admins can create users")
     }
 
-    // Try to initialize Admin Client
-    // This will throw if the Service Role Key is missing in Vercel
-    let supabaseAdmin
-    try {
-      supabaseAdmin = createAdminClient()
-    } catch (err) {
-      throw new Error("Server Configuration Error: SUPABASE_SERVICE_ROLE_KEY is missing in Vercel.")
-    }
+    // Initialize Admin Client (Allow the REAL error to bubble up)
+    const supabaseAdmin = createAdminClient()
     
     const email = formData.get('email') as string
     const password = formData.get('password') as string
@@ -52,7 +46,7 @@ export async function createUser(formData: FormData) {
         .eq('id', newUser.user.id)
     }
 
-    // Log the action (Safe logging - won't crash if logs table missing)
+    // Log the action
     try {
         await supabase.from('user_logs').insert({
             user_email: user?.email,
@@ -64,11 +58,10 @@ export async function createUser(formData: FormData) {
     }
 
   } catch (error: any) {
-    // Capture the specific error message
+    console.error("Create User Error:", error)
     errorMessage = error.message
   }
 
-  // Handle Redirect outside of try/catch to avoid Next.js conflicts
   if (errorMessage) {
     return redirect(`/admin/users?error=${encodeURIComponent(errorMessage)}`)
   }
@@ -129,7 +122,7 @@ export async function updateUserRole(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser()
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user?.id).single()
   
-  if (profile?.role !== 'admin') return // Silent fail for security
+  if (profile?.role !== 'admin') return
 
   const targetUserId = formData.get('id') as string
   const newRole = formData.get('role') as string
