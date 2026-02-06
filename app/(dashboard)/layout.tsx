@@ -8,7 +8,8 @@ import {
   FileText, 
   LogOut,
   CreditCard,
-  BarChart3 
+  BarChart3,
+  Activity 
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
@@ -35,7 +36,7 @@ export default async function DashboardLayout({
           <p className="text-xs text-gray-400 mt-1">Enterprise System</p>
         </div>
         
-        <nav className="flex-1 px-4 space-y-2 mt-4">
+        <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto">
           <Link href="/" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors">
             <LayoutDashboard size={20} />
             <span>Dashboard</span>
@@ -65,7 +66,6 @@ export default async function DashboardLayout({
             <span>Documents</span>
           </Link>
           
-          {/* UPDATED NAME HERE */}
           <Link href="/analysis" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors">
             <BarChart3 size={20} />
             <span>Analysis Order</span>
@@ -74,6 +74,12 @@ export default async function DashboardLayout({
           <Link href="/reports" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors">
             <FileText size={20} />
             <span>Reports (LHDN)</span>
+          </Link>
+
+          {/* NEW ADMIN LOGS LINK */}
+          <Link href="/admin/logs" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors text-blue-200">
+            <Activity size={20} />
+            <span>Admin Logs</span>
           </Link>
         </nav>
 
