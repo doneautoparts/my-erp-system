@@ -23,13 +23,6 @@ export default async function Dashboard() {
     .eq('sale_date', today)
 
   // B. Receivables (Money Customers Owe You)
-  // Logic: Sum of (total - paid) where total > paid
-  const { data: unpaidSales } = await supabase
-    .from('sales')
-    .select('total_amount, paid_amount')
-    .lt('paid_amount', supabase.rpc('get_total_amount')) // Pseudo-logic, we'll calc in JS for simplicity on small data
-    // For simple dashboards, fetching active sales is fast enough
-  
   const { data: allActiveSales } = await supabase
     .from('sales')
     .select('total_amount, paid_amount')
@@ -41,14 +34,11 @@ export default async function Dashboard() {
     .select('total_amount, paid_amount, currency, exchange_rate')
     .neq('status', 'Cancelled')
 
-  // D. Low Stock Items (Limit 5 for display)
+  // D. Low Stock Items (Limit 50 for display)
   const { data: lowStockItems } = await supabase
     .from('variants')
     .select('id, item_code, name, stock_quantity, min_stock_level, products(name)')
-    .not('min_stock_level', 'is', null) // Filter out items without alerts
-    
-    // We can't easily filter "col1 <= col2" in simple Supabase query without RPC
-    // So we fetch items with low stock numbers (e.g. < 10) and filter in JS for precision
+    .not('min_stock_level', 'is', null) 
     .lt('stock_quantity', 10) 
     .limit(50)
 
@@ -86,7 +76,10 @@ export default async function Dashboard() {
   }, 0) || 0
 
   // Filter Low Stock (Strict check: Stock <= Min)
-  const criticalStock = lowStockItems?.filter(i => i.stock_quantity <= (i.min_stock_level || 5)).slice(0, 5) || []
+  // FIX: Type safety for the map below
+  const criticalStock = (lowStockItems || [])
+    .filter((i: any) => i.stock_quantity <= (i.min_stock_level || 5))
+    .slice(0, 5)
 
   return (
     <div className="space-y-8">
@@ -183,17 +176,24 @@ export default async function Dashboard() {
                    </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                   {criticalStock.map(item => (
-                      <tr key={item.id}>
-                         <td className="px-4 py-3 font-bold text-gray-700">{item.item_code}</td>
-                         <td className="px-4 py-3 text-gray-600">{item.products?.name} - {item.name}</td>
-                         <td className="px-4 py-3 text-center">
-                            <span className="inline-flex px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-bold">
-                               {item.stock_quantity}
-                            </span>
-                         </td>
-                      </tr>
-                   ))}
+                   {criticalStock.map((item: any) => {
+                      // FIX: Safe Name Extraction for Product
+                      const productName = Array.isArray(item.products) 
+                        ? item.products[0]?.name 
+                        : item.products?.name
+
+                      return (
+                        <tr key={item.id}>
+                           <td className="px-4 py-3 font-bold text-gray-700">{item.item_code}</td>
+                           <td className="px-4 py-3 text-gray-600">{productName} - {item.name}</td>
+                           <td className="px-4 py-3 text-center">
+                              <span className="inline-flex px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-bold">
+                                 {item.stock_quantity}
+                              </span>
+                           </td>
+                        </tr>
+                      )
+                   })}
                    {criticalStock.length === 0 && (
                       <tr>
                          <td colSpan={3} className="px-4 py-6 text-center text-gray-400">All stock levels are healthy.</td>
