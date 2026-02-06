@@ -9,7 +9,8 @@ import {
   LogOut,
   CreditCard,
   BarChart3,
-  Activity 
+  Activity,
+  Shield
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
@@ -21,11 +22,21 @@ export default async function DashboardLayout({
   children: React.ReactNode
 }) {
   const supabase = await createClient()
+  
+  // 1. Get User
   const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  if (!user) {
-    redirect('/login')
-  }
+  // 2. Get Profile Role
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  const role = profile?.role || 'user' // default to user
+  const isAdmin = role === 'admin'
+  // const isManager = role === 'manager' || role === 'admin' // If needed later
 
   return (
     <div className="flex min-h-screen bg-gray-100">
@@ -76,21 +87,32 @@ export default async function DashboardLayout({
             <span>Reports (LHDN)</span>
           </Link>
 
-          {/* NEW ADMIN LOGS LINK */}
-          <Link href="/admin/logs" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors text-blue-200">
-            <Activity size={20} />
-            <span>Admin Logs</span>
-          </Link>
+          {/* ADMIN ONLY LINKS */}
+          {isAdmin && (
+            <>
+              <div className="pt-4 pb-2 text-xs font-bold text-gray-500 px-4 uppercase">Admin Tools</div>
+              
+              <Link href="/admin/users" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors text-indigo-200">
+                <Shield size={20} />
+                <span>Manage Users</span>
+              </Link>
+
+              <Link href="/admin/logs" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors text-indigo-200">
+                <Activity size={20} />
+                <span>Admin Logs</span>
+              </Link>
+            </>
+          )}
         </nav>
 
         <div className="p-4 border-t border-slate-800">
           <div className="flex items-center gap-3 px-4 py-2 text-sm text-gray-400">
-            <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center font-bold text-white">
               {user.email?.charAt(0).toUpperCase()}
             </div>
             <div className="overflow-hidden">
               <p className="truncate text-white">{user.email}</p>
-              <p className="text-xs">User</p>
+              <p className="text-xs capitalize">{role}</p>
             </div>
           </div>
           <form action={signOut}>
