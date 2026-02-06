@@ -38,7 +38,7 @@ export default function ShipmentSimulator({
 }) {
   const router = useRouter()
 
-  // --- LOGISTICS & TAX SCENARIO INPUTS ---
+  // --- VARIABLES ---
   const DEFAULT_RATE = 4.75
   const DEFAULT_OCEAN = 5000
   const DEFAULT_TRUCK = 800
@@ -53,7 +53,7 @@ export default function ShipmentSimulator({
   const [consumable, setConsumable] = useState(DEFAULT_CONSUMABLE) 
   const [license, setLicense] = useState(DEFAULT_LICENSE) 
 
-  // --- SELECTION STATE ---
+  // --- SELECTION ---
   const [selectedBrand, setSelectedBrand] = useState("")
   const [selectedProduct, setSelectedProduct] = useState("")
   const [selectedVariantId, setSelectedVariantId] = useState("")
@@ -90,8 +90,7 @@ export default function ShipmentSimulator({
       .sort((a, b) => (a.item_code || '').localeCompare(b.item_code || ''))
   }, [safeVariants, selectedBrand, selectedProduct])
 
-  // --- ACTIONS ---
-
+  // --- HANDLERS ---
   const handleAddItem = () => {
     const item = safeVariants.find(v => v.id === selectedVariantId)
     if (!item) return
@@ -120,19 +119,17 @@ export default function ShipmentSimulator({
   const updateOrderRow = (id: number, field: string, value: any) => {
     setOrderItems(prev => prev.map(item => {
       if (item.uniqueId !== id) return item;
-      if (field === 'selectedTier') {
-        let newPrice = item.targetPrice;
-        if (value === 'sell') newPrice = item.origSell;
-        else if (value === 'online') newPrice = item.origOnline;
-        else if (value === 'proposal') newPrice = item.origProposal;
-        return { ...item, selectedTier: value, targetPrice: newPrice };
-      }
       if (field === 'targetPrice') return { ...item, targetPrice: value, selectedTier: 'manual' };
       return { ...item, [field]: value };
     }))
   }
 
-  // Restores Global Tier Switching
+  const handleReset = () => {
+    if (orderItems.length > 0 && !confirm("Clear all data?")) return
+    setOrderItems([]); setScenarioName(""); setExchangeRate(DEFAULT_RATE); setOceanLumpSum(5000); setTruckingLumpSum(800); setIsFormE(true); setManualDutyPct(10); setConsumable(2.00); setLicense(0.30);
+    setSelectedBrand(""); setSelectedProduct(""); setSelectedVariantId(""); setQty(1);
+  }
+
   const handleGlobalTierChange = (newTier: "sell" | "online" | "proposal") => {
     setGlobalTier(newTier)
     setOrderItems(prev => prev.map(item => {
@@ -142,12 +139,6 @@ export default function ShipmentSimulator({
         else if (newTier === 'proposal') newPrice = item.origProposal
         return { ...item, targetPrice: newPrice, selectedTier: newTier }
     }))
-  }
-
-  const handleReset = () => {
-    if (orderItems.length > 0 && !confirm("Clear all data?")) return
-    setOrderItems([]); setScenarioName(""); setExchangeRate(DEFAULT_RATE); setOceanLumpSum(5000); setTruckingLumpSum(800); setIsFormE(true); setManualDutyPct(10); setConsumable(2.00); setLicense(0.30);
-    setSelectedBrand(""); setSelectedProduct(""); setSelectedVariantId(""); setQty(1);
   }
 
   const handleSave = async () => {
@@ -260,7 +251,13 @@ export default function ShipmentSimulator({
           @page { size: landscape; margin: 5mm; }
           body * { visibility: hidden; }
           #print-area, #print-area * { visibility: visible; }
-          #print-area { position: absolute; left: 0; top: 0; width: 100vw; margin: 0; padding: 0; }
+          #print-area { 
+            position: absolute; 
+            left: 0; 
+            top: 0; 
+            width: 100vw; 
+            margin: 0; padding: 0;
+          }
           .print-hidden { display: none !important; }
           .print-full-width { width: 100% !important; margin: 0 !important; }
           .print-visible { display: block !important; }
@@ -407,62 +404,65 @@ export default function ShipmentSimulator({
             </div>
 
             <div className="flex gap-2 print-hidden">
-                <button onClick={exportToCSV} className="flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-900 border border-green-200 px-2 py-1 rounded">
-                <Download size={14} /> Excel
-                </button>
-                <button onClick={handlePrint} className="flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-900 border border-blue-200 px-2 py-1 rounded">
-                <Printer size={14} /> Print PDF
-                </button>
+                <button onClick={exportToCSV} className="flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-900 border border-green-200 px-2 py-1 rounded"><Download size={14} /> Excel</button>
+                <button onClick={handlePrint} className="flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-900 border border-blue-200 px-2 py-1 rounded"><Printer size={14} /> Print PDF</button>
             </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-xs">
               <thead className="bg-gray-100 text-gray-600 uppercase font-bold print:bg-gray-200 print:text-black print:border-b print:border-black">
                 <tr>
-                  <th className="px-2 py-2 text-left">Item Details</th>
-                  <th className="px-2 py-2 text-center bg-yellow-50 print:bg-white">Qty</th>
-                  <th className="px-2 py-2 text-center bg-purple-50 print:bg-white">Ctn</th>
-                  <th className="px-2 py-2 text-right bg-purple-50 print:bg-white">CBM</th>
-                  <th className="px-2 py-2 text-right">Cost(USD)</th>
-                  <th className="px-2 py-2 text-right">FOB(RM)</th>
-                  <th className="px-2 py-2 text-right bg-blue-50 print:bg-white">Landed</th>
-                  <th className="px-2 py-2 text-center bg-green-50 print:bg-white w-[15%]">Target Price</th>
-                  <th className="px-2 py-2 text-right bg-green-50 print:bg-white">Profit</th>
-                  <th className="px-2 py-2 text-right bg-green-50 print:bg-white">Margin</th>
-                  <th className="px-2 py-2 text-center print-hidden">Act</th>
+                  <th className="px-3 py-2 text-left">Item Details</th>
+                  <th className="px-3 py-2 text-center bg-yellow-50 print:bg-white">Qty</th>
+                  <th className="px-3 py-2 text-center bg-purple-50 print:bg-white">Ctn</th>
+                  <th className="px-3 py-2 text-right bg-purple-50 print:bg-white">CBM</th>
+                  <th className="px-3 py-2 text-right">Cost(USD)</th>
+                  <th className="px-3 py-2 text-right">FOB(RM)</th>
+                  <th className="px-3 py-2 text-right bg-blue-50 print:bg-white">Landed</th>
+                  <th className="px-3 py-2 text-center bg-green-50 print:bg-white w-[15%]">Target Price</th>
+                  <th className="px-3 py-2 text-right bg-green-50 print:bg-white">Profit</th>
+                  <th className="px-3 py-2 text-right bg-green-50 print:bg-white">Margin</th>
+                  <th className="px-3 py-2 text-center print-hidden">Act</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 print:divide-gray-300">
                 {calculation.rows.map((row) => (
                   <tr key={row.uniqueId} className={`hover:bg-gray-50 ${row.isLowMargin ? 'bg-red-50' : ''} print:bg-white`}>
-                    <td className="px-2 py-2">
+                    <td className="px-3 py-2">
                       <div className="text-[10px] text-gray-500 font-bold">{getSafeName(row, 'brandName')} {getSafeName(row, 'name')}</div>
                       <div className="font-bold text-gray-900">{row.item_code}</div>
                       <div className="text-gray-500 truncate max-w-[200px]">{row.name}</div>
                     </td>
-                    <td className="px-2 py-2 text-center bg-yellow-50 print:bg-white">
-                      <input type="number" value={row.orderQty} onChange={(e) => updateOrderRow(row.uniqueId, 'orderQty', parseInt(e.target.value))} className="w-12 text-center border rounded p-1 bg-white print-hidden" />
+                    <td className="px-3 py-2 text-center bg-yellow-50 print:bg-white">
+                      <input 
+                        type="number" 
+                        value={row.orderQty} 
+                        onChange={(e) => updateOrderRow(row.uniqueId, 'orderQty', parseInt(e.target.value))}
+                        className="w-16 text-center border rounded p-1 bg-white print-hidden"
+                      />
                       <span className="hidden print:inline">{row.orderQty}</span>
                     </td>
-                    <td className="px-2 py-2 text-center bg-purple-50 print:bg-white font-medium">{(row.exactCartons || 0).toFixed(2)}</td>
-                    <td className="px-2 py-2 text-right bg-purple-50 print:bg-white font-medium">{(row.totalItemCBM || 0).toFixed(3)}</td>
-                    <td className="px-2 py-2 text-right font-mono text-gray-600">{(row.unitFobUSD || 0) > 0 ? (row.unitFobUSD || 0).toFixed(2) : '-'}</td>
-                    <td className="px-2 py-2 text-right font-mono text-gray-600">{(row.unitFobRM || 0).toFixed(2)}</td>
-                    <td className="px-2 py-2 text-right font-bold text-blue-700 bg-blue-50 print:bg-white print:text-black">{(row.landedCost || 0).toFixed(2)}</td>
+                    <td className="px-3 py-2 text-center bg-purple-50 print:bg-white font-medium">{row.exactCartons.toFixed(2)}</td>
+                    <td className="px-3 py-2 text-right bg-purple-50 print:bg-white font-medium">{row.totalItemCBM.toFixed(3)}</td>
+                    <td className="px-3 py-2 text-right font-mono text-gray-600">{row.unitFobUSD > 0 ? row.unitFobUSD.toFixed(2) : '-'}</td>
+                    <td className="px-3 py-2 text-right font-mono text-gray-600">{row.unitFobRM.toFixed(2)}</td>
+                    <td className="px-3 py-2 text-right font-bold text-blue-700 bg-blue-50 print:bg-white print:text-black">{row.landedCost.toFixed(2)}</td>
                     
-                    <td className="px-2 py-2 bg-green-50 print:bg-white">
-                       <div className="flex justify-between gap-1 print-hidden text-[9px] mb-1">
-                          <label className="cursor-pointer text-gray-500"><input type="radio" name={`t-${row.uniqueId}`} checked={row.selectedTier==='sell'} onChange={()=>updateOrderRow(row.uniqueId,'selectedTier','sell')}/> S</label>
-                          <label className="cursor-pointer text-gray-500"><input type="radio" name={`t-${row.uniqueId}`} checked={row.selectedTier==='online'} onChange={()=>updateOrderRow(row.uniqueId,'selectedTier','online')}/> O</label>
-                          <label className="cursor-pointer text-gray-500"><input type="radio" name={`t-${row.uniqueId}`} checked={row.selectedTier==='proposal'} onChange={()=>updateOrderRow(row.uniqueId,'selectedTier','proposal')}/> P</label>
-                       </div>
-                       <input type="number" value={row.targetPrice} onChange={(e) => updateOrderRow(row.uniqueId, 'targetPrice', parseFloat(e.target.value))} className="w-full text-right border rounded p-1 bg-white print-hidden font-bold" step="0.01" />
-                       <span className="hidden print:block text-right font-bold">{(row.targetPrice || 0).toFixed(2)}</span>
+                    {/* CLEANED UP TARGET PRICE COLUMN */}
+                    <td className="px-3 py-2 bg-green-50 print:bg-white">
+                       <input 
+                        type="number" 
+                        value={row.targetPrice} 
+                        onChange={(e) => updateOrderRow(row.uniqueId, 'targetPrice', parseFloat(e.target.value))}
+                        className="w-full text-right border rounded p-1 bg-white print-hidden font-bold"
+                        step="0.01"
+                      />
+                      <span className="hidden print:block text-right font-bold">{(row.targetPrice || 0).toFixed(2)}</span>
                     </td>
 
-                    <td className={`px-2 py-2 text-right font-bold bg-green-50 print:bg-white ${(row.grossProfit || 0) > 0 ? 'text-green-700' : 'text-red-700'}`}>{(row.grossProfit || 0).toFixed(2)}</td>
-                    <td className="px-2 py-2 text-right font-bold bg-green-50 print:bg-white">{(row.margin || 0).toFixed(1)}%</td>
-                    <td className="px-2 py-2 text-center print-hidden"><button onClick={() => handleRemove(row.uniqueId)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button></td>
+                    <td className={`px-3 py-2 text-right font-bold bg-green-50 print:bg-white ${(row.grossProfit || 0) > 0 ? 'text-green-700' : 'text-red-700'}`}>{(row.grossProfit || 0).toFixed(2)}</td>
+                    <td className="px-3 py-2 text-right font-bold bg-green-50 print:bg-white">{(row.margin || 0).toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-center print-hidden"><button onClick={() => handleRemove(row.uniqueId)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button></td>
                   </tr>
                 ))}
               </tbody>
