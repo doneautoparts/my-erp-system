@@ -1,9 +1,37 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
-import { createAdminClient } from '@/utils/supabase/admin'
+// Removed the import from utils/supabase/admin to fix the reading issue
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+
+// --- INTERNAL HELPER: CREATE ADMIN CLIENT HERE ---
+function getAdminClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl) {
+    throw new Error("System Error: NEXT_PUBLIC_SUPABASE_URL is missing.")
+  }
+  
+  if (!serviceRoleKey) {
+    // Debugging info: Print to server logs (not visible to user)
+    console.error("CRITICAL: SUPABASE_SERVICE_ROLE_KEY is undefined on the server.")
+    throw new Error("System Error: The Secret Key (SUPABASE_SERVICE_ROLE_KEY) is missing in Vercel.")
+  }
+
+  return createSupabaseClient(
+    supabaseUrl,
+    serviceRoleKey,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  )
+}
 
 // 1. CREATE NEW USER
 export async function createUser(formData: FormData) {
@@ -20,8 +48,8 @@ export async function createUser(formData: FormData) {
       throw new Error("Unauthorized: Only Admins can create users")
     }
 
-    // Initialize Admin Client (Allow the REAL error to bubble up)
-    const supabaseAdmin = createAdminClient()
+    // Initialize Admin Client (Using local function)
+    const supabaseAdmin = getAdminClient()
     
     const email = formData.get('email') as string
     const password = formData.get('password') as string
@@ -54,7 +82,7 @@ export async function createUser(formData: FormData) {
             details: `Created user ${email} as ${role}`
         })
     } catch (logErr) {
-        console.error("Logging failed (non-critical):", logErr)
+        console.error("Logging failed:", logErr)
     }
 
   } catch (error: any) {
@@ -86,7 +114,7 @@ export async function deleteUser(formData: FormData) {
     const targetUserId = formData.get('id') as string
     const targetUserEmail = formData.get('email') as string
 
-    const supabaseAdmin = createAdminClient()
+    const supabaseAdmin = getAdminClient()
     
     const { error } = await supabaseAdmin.auth.admin.deleteUser(targetUserId)
 
@@ -122,12 +150,12 @@ export async function updateUserRole(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser()
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user?.id).single()
   
-  if (profile?.role !== 'admin') return
+  if (profile?.role !== 'admin') return 
 
   const targetUserId = formData.get('id') as string
   const newRole = formData.get('role') as string
 
-  const supabaseAdmin = createAdminClient()
+  const supabaseAdmin = getAdminClient()
 
   await supabaseAdmin
     .from('profiles')
