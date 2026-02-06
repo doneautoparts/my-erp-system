@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, Download, Truck, Anchor, Save, FolderOpen, Printer, RotateCcw } from 'lucide-react'
+import { Plus, Trash2, Box, Download, Truck, Anchor, Save, FolderOpen, Printer, RotateCcw } from 'lucide-react'
 import { saveScenario, deleteScenario, getScenario } from './actions'
 import { useRouter } from 'next/navigation'
 
@@ -38,7 +38,7 @@ export default function ShipmentSimulator({
 }) {
   const router = useRouter()
 
-  // --- VARIABLES ---
+  // --- LOGISTICS & TAX SCENARIO INPUTS ---
   const DEFAULT_RATE = 4.75
   const DEFAULT_OCEAN = 5000
   const DEFAULT_TRUCK = 800
@@ -53,7 +53,7 @@ export default function ShipmentSimulator({
   const [consumable, setConsumable] = useState(DEFAULT_CONSUMABLE) 
   const [license, setLicense] = useState(DEFAULT_LICENSE) 
 
-  // --- SELECTION ---
+  // --- SELECTION STATE ---
   const [selectedBrand, setSelectedBrand] = useState("")
   const [selectedProduct, setSelectedProduct] = useState("")
   const [selectedVariantId, setSelectedVariantId] = useState("")
@@ -90,7 +90,8 @@ export default function ShipmentSimulator({
       .sort((a, b) => (a.item_code || '').localeCompare(b.item_code || ''))
   }, [safeVariants, selectedBrand, selectedProduct])
 
-  // --- HANDLERS ---
+  // --- ACTIONS ---
+
   const handleAddItem = () => {
     const item = safeVariants.find(v => v.id === selectedVariantId)
     if (!item) return
@@ -131,6 +132,18 @@ export default function ShipmentSimulator({
     }))
   }
 
+  // Restores Global Tier Switching
+  const handleGlobalTierChange = (newTier: "sell" | "online" | "proposal") => {
+    setGlobalTier(newTier)
+    setOrderItems(prev => prev.map(item => {
+        let newPrice = 0
+        if (newTier === 'sell') newPrice = item.origSell
+        else if (newTier === 'online') newPrice = item.origOnline
+        else if (newTier === 'proposal') newPrice = item.origProposal
+        return { ...item, targetPrice: newPrice, selectedTier: newTier }
+    }))
+  }
+
   const handleReset = () => {
     if (orderItems.length > 0 && !confirm("Clear all data?")) return
     setOrderItems([]); setScenarioName(""); setExchangeRate(DEFAULT_RATE); setOceanLumpSum(5000); setTruckingLumpSum(800); setIsFormE(true); setManualDutyPct(10); setConsumable(2.00); setLicense(0.30);
@@ -160,12 +173,11 @@ export default function ShipmentSimulator({
     setIsLoading(false)
   }
 
-  // --- ENGINE: CALCULATIONS (CRASH PROOFED) ---
+  // --- ENGINE: CALCULATIONS ---
   const calculation = useMemo(() => {
     let totalCBM = 0, totalFOB_RM = 0, totalFOB_USD = 0, totalExactCartons = 0, totalQty = 0
 
     const rowsWithVolume = orderItems.map(item => {
-      // Safety Checks
       const safeItem = item || {}
       const length = safeItem.ctn_len || 0
       const width = safeItem.ctn_wid || 0
@@ -198,7 +210,7 @@ export default function ShipmentSimulator({
     const finalRows = rowsWithVolume.map(item => {
       const cbmShare = totalCBM > 0 ? (item.totalItemCBM / totalCBM) : 0
       const allocatedLogistics = (item.orderQty > 0) ? (cbmShare * totalLogisticsLumpSum) / item.orderQty : 0
-      const valueShare = totalFOB_RM > 0 ? (item.totalItemFobRM / totalFOB_RM) : 0
+      const valueShare = totalFOB_RM > 0 ? (item.unitFobRM * item.orderQty / totalFOB_RM) : 0
       const allocatedSST = (item.orderQty > 0) ? (valueShare * totalSST) / item.orderQty : 0
       const unitDuty = item.unitFobRM * dutyRate
       const landedCost = item.unitFobRM + allocatedLogistics + unitDuty + allocatedSST + consumable + license
@@ -248,13 +260,7 @@ export default function ShipmentSimulator({
           @page { size: landscape; margin: 5mm; }
           body * { visibility: hidden; }
           #print-area, #print-area * { visibility: visible; }
-          #print-area { 
-            position: absolute; 
-            left: 0; 
-            top: 0; 
-            width: 100vw; 
-            margin: 0; padding: 0;
-          }
+          #print-area { position: absolute; left: 0; top: 0; width: 100vw; margin: 0; padding: 0; }
           .print-hidden { display: none !important; }
           .print-full-width { width: 100% !important; margin: 0 !important; }
           .print-visible { display: block !important; }
@@ -385,15 +391,28 @@ export default function ShipmentSimulator({
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden print:border-2 print:border-black">
           <div className="flex justify-between items-center p-3 border-b bg-gray-50 print:bg-white print:border-black">
             <h3 className="font-bold text-gray-700">Shipment Manifest</h3>
+            
+            {/* GLOBAL PRICE SWITCHER */}
             <div className="flex gap-2 items-center print-hidden bg-gray-100 p-1 rounded-md">
-                <span className="text-xs font-bold text-gray-500 px-2">Global Price:</span>
-                <button onClick={() => handleGlobalTierChange('sell')} className={`px-2 py-1 text-xs rounded ${globalTier === 'sell' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500'}`}>SELL</button>
-                <button onClick={() => handleGlobalTierChange('online')} className={`px-2 py-1 text-xs rounded ${globalTier === 'online' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500'}`}>ONLINE</button>
-                <button onClick={() => handleGlobalTierChange('proposal')} className={`px-2 py-1 text-xs rounded ${globalTier === 'proposal' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500'}`}>PROP</button>
+                <span className="text-xs font-bold text-gray-500 px-2">Set Price:</span>
+                <button onClick={() => handleGlobalTierChange('sell')} className={`px-2 py-1 text-xs rounded ${globalTier === 'sell' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>
+                    SELL
+                </button>
+                <button onClick={() => handleGlobalTierChange('online')} className={`px-2 py-1 text-xs rounded ${globalTier === 'online' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>
+                    ONLINE
+                </button>
+                <button onClick={() => handleGlobalTierChange('proposal')} className={`px-2 py-1 text-xs rounded ${globalTier === 'proposal' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>
+                    PROP
+                </button>
             </div>
+
             <div className="flex gap-2 print-hidden">
-                <button onClick={exportToCSV} className="flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-900 border border-green-200 px-2 py-1 rounded"><Download size={14} /> Excel</button>
-                <button onClick={handlePrint} className="flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-900 border border-blue-200 px-2 py-1 rounded"><Printer size={14} /> Print PDF</button>
+                <button onClick={exportToCSV} className="flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-900 border border-green-200 px-2 py-1 rounded">
+                <Download size={14} /> Excel
+                </button>
+                <button onClick={handlePrint} className="flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-900 border border-blue-200 px-2 py-1 rounded">
+                <Printer size={14} /> Print PDF
+                </button>
             </div>
           </div>
           <div className="overflow-x-auto">
