@@ -1,10 +1,10 @@
 import { createClient } from '@/utils/supabase/server'
-import ProfitCalculator from './profit-calculator'
+import ShipmentSimulator from './profit-calculator'
 
 export default async function AnalysisPage() {
   const supabase = await createClient()
 
-  // 1. Fetch ALL variants
+  // 1. Fetch ALL variants with ALL price details
   const { data: variants } = await supabase
     .from('variants')
     .select(`
@@ -14,7 +14,9 @@ export default async function AnalysisPage() {
       part_number,
       cost_usd,
       cost_rm,
-      price_proposal,
+      price_myr,       
+      price_online,    
+      price_proposal,  
       packing_ratio,
       ctn_qty,
       ctn_len,
@@ -35,14 +37,7 @@ export default async function AnalysisPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Profit & Logistics Simulator</h1>
-        <p className="text-sm text-gray-500">
-          Calculate Landed Costs, Gross Margins, and Container Volume (CBM). Save your drafts below.
-        </p>
-      </div>
-
-      <ProfitCalculator 
+      <ShipmentSimulator 
         variants={variants || []} 
         savedScenarios={savedScenarios || []}
       />
