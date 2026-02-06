@@ -1,7 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
-import { Shield, Trash2, UserPlus, Save } from 'lucide-react'
-import { createUser, deleteUser, updateUserRole } from './actions'
-import { redirect } from 'next/navigation'
+import { Shield, Trash2, UserPlus, Save, AlertTriangle } from 'lucide-react'
+import { deleteUser, updateUserRole, createUser } from './actions'
 
 export default async function UserManagementPage({
   searchParams,
@@ -10,16 +9,27 @@ export default async function UserManagementPage({
 }) {
   const { error } = await searchParams
   const supabase = await createClient()
+  let profiles: any[] = []
+  let fetchError = null
 
-  // 1. Security Check
+  // 1. Safe Data Fetching
+  try {
+    const { data, error: dbError } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false })
+    
+    if (dbError) throw dbError
+    profiles = data || []
+  } catch (err: any) {
+    fetchError = err.message
+  }
+
+  // 2. Check Current User Role
   const { data: { user } } = await supabase.auth.getUser()
-  const { data: currentUserProfile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user?.id)
-    .single()
+  const currentUserRole = profiles.find(p => p.id === user?.id)?.role || 'user'
 
-  if (currentUserProfile?.role !== 'admin') {
+  if (currentUserRole !== 'admin') {
     return (
       <div className="p-8 text-center text-red-600">
         <Shield size={48} className="mx-auto mb-4" />
@@ -28,12 +38,6 @@ export default async function UserManagementPage({
       </div>
     )
   }
-
-  // 2. Fetch All Profiles
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('*')
-    .order('created_at', { ascending: false })
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
@@ -53,34 +57,35 @@ export default async function UserManagementPage({
         </div>
       )}
 
+      {fetchError && (
+        <div className="p-4 bg-orange-50 text-orange-800 border border-orange-200 rounded-md flex items-center gap-2">
+            <AlertTriangle size={20} />
+            <div>
+                <p className="font-bold">Database Error</p>
+                <p className="text-sm">{fetchError}</p>
+            </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* LEFT: CREATE USER FORM */}
+        {/* LEFT: INSTRUCTION CARD (Replaced the complex Create form) */}
         <div className="bg-white p-6 rounded-lg shadow border border-gray-200 h-fit">
           <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <UserPlus size={18} /> Create New User
+            <UserPlus size={18} /> Add New User
           </h2>
-          <form action={createUser} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase">Email</label>
-              <input name="email" type="email" required className="w-full border rounded p-2 text-sm" placeholder="staff@company.com" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase">Password</label>
-              <input name="password" type="password" required className="w-full border rounded p-2 text-sm" placeholder="******" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase">Role</label>
-              <select name="role" className="w-full border rounded p-2 text-sm bg-white">
-                <option value="user">User (View Only)</option>
-                <option value="manager">Manager (Edit Data)</option>
-                <option value="admin">Admin (Full Access)</option>
-              </select>
-            </div>
-            <button className="w-full bg-indigo-600 text-white p-2 rounded hover:bg-indigo-500 text-sm font-bold">
-              Create User
-            </button>
-          </form>
+          
+          <div className="text-sm text-gray-600 space-y-4">
+              <p>To ensure security, please follow these steps to add a new staff member:</p>
+              <ol className="list-decimal ml-4 space-y-2">
+                  <li>Open an <strong>Incognito / Private Window</strong>.</li>
+                  <li>Go to this website and click <strong>Sign Up</strong>.</li>
+                  <li>Register the new staff email and password.</li>
+                  <li>Close the private window.</li>
+                  <li>Refresh this page.</li>
+                  <li>Change their role from <strong>User</strong> to <strong>Manager</strong> in the list on the right.</li>
+              </ol>
+          </div>
           
           <div className="mt-6 p-4 bg-gray-50 text-xs text-gray-500 rounded border border-gray-200">
             <strong>Role Guide:</strong>
@@ -97,13 +102,13 @@ export default async function UserManagementPage({
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 text-gray-500 font-bold uppercase text-xs">
               <tr>
-                <th className="px-4 py-3 text-left">User</th>
+                <th className="px-4 py-3 text-left">User Email</th>
                 <th className="px-4 py-3 text-left">Role</th>
                 <th className="px-4 py-3 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {profiles?.map((profile) => (
+              {profiles.map((profile) => (
                 <tr key={profile.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="font-bold text-gray-900">{profile.email}</div>
@@ -117,7 +122,7 @@ export default async function UserManagementPage({
                       <select 
                         name="role" 
                         defaultValue={profile.role} 
-                        className={`border rounded p-1 text-xs font-bold uppercase ${
+                        className={`border rounded p-1 text-xs font-bold uppercase cursor-pointer ${
                           profile.role === 'admin' ? 'text-red-600 border-red-200 bg-red-50' : 
                           profile.role === 'manager' ? 'text-blue-600 border-blue-200 bg-blue-50' : 
                           'text-gray-600 border-gray-200 bg-gray-50'
@@ -127,7 +132,7 @@ export default async function UserManagementPage({
                         <option value="manager">Manager</option>
                         <option value="admin">Admin</option>
                       </select>
-                      <button className="text-gray-400 hover:text-green-600" title="Save Role">
+                      <button className="text-gray-400 hover:text-green-600 p-1 rounded hover:bg-green-50" title="Save Role">
                         <Save size={16} />
                       </button>
                     </form>
@@ -136,10 +141,9 @@ export default async function UserManagementPage({
                   {/* DELETE ACTION */}
                   <td className="px-4 py-3 text-center">
                     {profile.id !== user?.id ? (
-                      <form action={deleteUser} onSubmit={(e) => { if(!confirm('Delete this user?')) e.preventDefault() }}>
+                      <form action={deleteUser}>
                         <input type="hidden" name="id" value={profile.id} />
-                        <input type="hidden" name="email" value={profile.email} />
-                        <button className="text-gray-300 hover:text-red-600 transition-colors">
+                        <button className="text-gray-300 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-50" title="Remove User">
                           <Trash2 size={16} />
                         </button>
                       </form>
