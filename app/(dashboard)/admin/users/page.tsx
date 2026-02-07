@@ -7,28 +7,41 @@ import { redirect } from 'next/navigation'
 export default async function UserManagementPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>
+  searchParams: Promise<{ error?: string | string[] }>
 }) {
-  const { error } = await searchParams
+  // 1. Safe Search Params Handling
+  const resolvedParams = await searchParams
+  const rawError = resolvedParams?.error
+  // Ensure error is a string, even if multiple errors exist
+  const errorMessage = Array.isArray(rawError) ? rawError[0] : rawError
+
   const supabase = await createClient()
   
-  // 1. Get Current User safely
+  let profiles: any[] = []
+  let dbErrorMsg = null
+  let currentUserRole = 'user'
+
+  // 2. Authenticate User
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   
   if (authError || !user) {
     redirect('/login')
   }
 
-  // 2. Fetch Current User's Profile
-  const { data: currentUserProfile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+  // 3. Fetch Current User Role (Safe Mode)
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle() // Use maybeSingle to avoid 500 error if profile missing
+    
+    currentUserRole = profile?.role ? String(profile.role) : 'user'
+  } catch (err) {
+    console.error("Profile check failed", err)
+  }
 
-  const currentUserRole = currentUserProfile?.role || 'user'
-
-  // 3. Security Block
+  // 4. Security Block
   if (currentUserRole !== 'admin') {
     return (
       <div className="flex flex-col items-center justify-center h-[50vh] text-red-600">
@@ -40,11 +53,22 @@ export default async function UserManagementPage({
     )
   }
 
-  // 4. Fetch All Profiles
-  const { data: profiles, error: dbError } = await supabase
-    .from('profiles')
-    .select('*')
-    .order('created_at', { ascending: false })
+  // 5. Fetch All Profiles (Safe Mode)
+  try {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false })
+    
+    if (error) {
+        dbErrorMsg = error.message
+    } else {
+        profiles = data || []
+    }
+  } catch (err: any) {
+    dbErrorMsg = err.message || "Unknown database error"
+    profiles = []
+  }
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
@@ -58,18 +82,21 @@ export default async function UserManagementPage({
         </div>
       </div>
 
-      {error && (
+      {/* ERROR DISPLAY (Safe) */}
+      {errorMessage && (
         <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md flex items-center gap-2">
-            <AlertCircle size={18} /> {error}
+            <AlertCircle size={18} /> 
+            <span>{errorMessage}</span>
         </div>
       )}
 
-      {dbError && (
+      {/* DATABASE ERROR DISPLAY */}
+      {dbErrorMsg && (
         <div className="p-4 bg-orange-50 text-orange-800 border border-orange-200 rounded-md flex items-center gap-2">
             <AlertTriangle size={20} />
             <div>
                 <p className="font-bold">Database Error</p>
-                <p className="text-sm">{dbError.message}</p>
+                <p className="text-sm">{String(dbErrorMsg)}</p>
             </div>
         </div>
       )}
@@ -93,15 +120,6 @@ export default async function UserManagementPage({
                   <li>Change their role from <strong>User</strong> to <strong>Manager</strong> in the list on the right.</li>
               </ol>
           </div>
-          
-          <div className="mt-6 p-4 bg-gray-50 text-xs text-gray-500 rounded border border-gray-200">
-            <strong>Role Guide:</strong>
-            <ul className="list-disc ml-4 mt-2 space-y-1">
-              <li><strong>Admin:</strong> Full access to Users, Logs, and Data.</li>
-              <li><strong>Manager:</strong> Can Add/Edit Inventory, Sales, Purchasing. No access to Logs/Users.</li>
-              <li><strong>User:</strong> Can View data only. Cannot Edit/Delete.</li>
-            </ul>
-          </div>
         </div>
 
         {/* RIGHT: USER LIST */}
@@ -116,11 +134,11 @@ export default async function UserManagementPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {profiles?.map((profile) => (
+              {profiles.map((profile) => (
                 <tr key={profile.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="font-bold text-gray-900">{profile.email}</div>
-                    <div className="text-xs text-gray-400">ID: {profile.id.slice(0,8)}...</div>
+                    <div className="text-xs text-gray-400">ID: {String(profile.id).slice(0,8)}...</div>
                   </td>
                   
                   {/* APPROVAL STATUS */}
@@ -136,7 +154,7 @@ export default async function UserManagementPage({
                    )}
                   </td>
                   
-                  {/* ROLE EDITOR */}
+                  {/* DYNAMIC ROLE EDITOR */}
                   <td className="px-4 py-3">
                     <RoleEditor userId={profile.id} initialRole={profile.role || 'user'} />
                   </td>
@@ -172,7 +190,7 @@ export default async function UserManagementPage({
               {(!profiles || profiles.length === 0) && (
                   <tr>
                       <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
-                          No users found (which is odd, since you are here).
+                          No users found.
                       </td>
                   </tr>
               )}
