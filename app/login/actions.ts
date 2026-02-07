@@ -12,24 +12,38 @@ export async function login(formData: FormData) {
     password: formData.get('password') as string,
   }
 
-  const { error } = await supabase.auth.signInWithPassword(data)
+  // 1. Attempt Authentication
+  const { data: authData, error: authError } = await supabase.auth.signInWithPassword(data)
 
-  if (error) {
-    redirect(`/error?message=${encodeURIComponent(error.message)}`)
+  if (authError) {
+    redirect(`/login?error=${encodeURIComponent(authError.message)}`)
   }
 
-  // --- LOGGING THE LOGIN ACTION ---
-  try {
-    await supabase.from('user_logs').insert({
-      user_email: data.email,
-      action: 'LOGIN',
-      details: 'User logged in successfully'
-    })
-  } catch (err) {
-    console.error("Failed to log login action", err)
-    // We don't stop the login process if logging fails
+  // 2. Check Approval & Role
+  if (authData.user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_approved')
+      .eq('id', authData.user.id)
+      .single()
+
+    // IF NOT APPROVED -> LOGOUT AND REJECT
+    if (profile && !profile.is_approved) {
+      await supabase.auth.signOut()
+      redirect(`/login?error=Account pending Admin approval.`)
+    }
+
+    // 3. Log the successful login
+    try {
+      await supabase.from('user_logs').insert({
+        user_email: data.email,
+        action: 'LOGIN',
+        details: 'User logged in successfully'
+      })
+    } catch (err) {
+      console.error("Log error", err)
+    }
   }
-  // --------------------------------
 
   revalidatePath('/', 'layout')
   redirect('/')
@@ -46,9 +60,9 @@ export async function signup(formData: FormData) {
   const { error } = await supabase.auth.signUp(data)
 
   if (error) {
-    redirect(`/error?message=${encodeURIComponent(error.message)}`)
+    redirect(`/login?error=${encodeURIComponent(error.message)}`)
   }
 
-  revalidatePath('/', 'layout')
-  redirect('/')
+  // Success message instead of direct login (since they need approval)
+  redirect(`/login?error=Account created! Please wait for Admin approval.`)
 }
