@@ -1,8 +1,14 @@
 import Link from 'next/link'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, AlertCircle } from 'lucide-react'
 import { createCustomer } from '../actions'
 
-export default function NewCustomerPage() {
+export default async function NewCustomerPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>
+}) {
+  const { error } = await searchParams
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
@@ -11,6 +17,19 @@ export default function NewCustomerPage() {
         </Link>
         <h1 className="text-2xl font-bold text-gray-900">Add Customer</h1>
       </div>
+
+      {/* ERROR DISPLAY */}
+      {error && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-6 w-6 text-red-600" />
+            <div>
+              <p className="font-bold text-red-800">Action Failed</p>
+              <p className="text-sm text-red-700">{decodeURIComponent(error)}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <form action={createCustomer} className="bg-white p-8 rounded-lg shadow border border-gray-200 space-y-6">
         <div className="grid grid-cols-2 gap-4">
@@ -32,9 +51,8 @@ export default function NewCustomerPage() {
           <input name="company_name" className="form-input mt-1 block w-full rounded-md border border-gray-300 p-2" />
         </div>
 
-        {/* NEW TIN FIELD */}
         <div>
-          <label className="block text-sm font-medium text-gray-700">TIN Number (For e-Invoice)</label>
+          <label className="block text-sm font-medium text-gray-700">TIN Number</label>
           <input name="tin_number" className="form-input mt-1 block w-full rounded-md border border-gray-300 p-2 font-mono text-sm" placeholder="e.g. IG1234567890" />
         </div>
 

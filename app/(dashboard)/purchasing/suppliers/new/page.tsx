@@ -1,8 +1,14 @@
 import Link from 'next/link'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, AlertCircle } from 'lucide-react'
 import { createSupplier } from '../../actions'
 
-export default function NewSupplierPage() {
+export default async function NewSupplierPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>
+}) {
+  const { error } = await searchParams
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
@@ -14,6 +20,19 @@ export default function NewSupplierPage() {
         </Link>
         <h1 className="text-2xl font-bold text-gray-900">Add New Supplier</h1>
       </div>
+
+      {/* ERROR DISPLAY */}
+      {error && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-6 w-6 text-red-600" />
+            <div>
+              <p className="font-bold text-red-800">Action Failed</p>
+              <p className="text-sm text-red-700">{decodeURIComponent(error)}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <form action={createSupplier} className="bg-white p-8 rounded-lg shadow border border-gray-200 space-y-6">
         
@@ -27,7 +46,6 @@ export default function NewSupplierPage() {
             />
           </div>
 
-          {/* NEW TIN FIELD */}
           <div>
             <label className="block text-sm font-medium text-gray-700">TIN Number (Tax ID)</label>
             <input
