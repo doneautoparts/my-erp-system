@@ -7,41 +7,59 @@ import { redirect } from 'next/navigation'
 export default async function UserManagementPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string | string[] }>
+  searchParams: Promise<{ error?: string }>
 }) {
-  // 1. Safe Search Params Handling
+  // 1. Safe Parameter Reading
   const resolvedParams = await searchParams
-  const rawError = resolvedParams?.error
-  // Ensure error is a string, even if multiple errors exist
-  const errorMessage = Array.isArray(rawError) ? rawError[0] : rawError
+  const errorMsg = resolvedParams?.error
 
   const supabase = await createClient()
   
   let profiles: any[] = []
-  let dbErrorMsg = null
+  let dbError = null
   let currentUserRole = 'user'
+  let currentUser = null
 
-  // 2. Authenticate User
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  
-  if (authError || !user) {
-    redirect('/login')
-  }
-
-  // 3. Fetch Current User Role (Safe Mode)
   try {
+    // 2. Safe Authentication
+    const { data: authData, error: authError } = await supabase.auth.getUser()
+    if (authError || !authData?.user) {
+      // Don't redirect immediately inside try/catch, just flag it
+      throw new Error("Authentication failed")
+    }
+    currentUser = authData.user
+
+    // 3. Safe Profile Fetch
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
-      .eq('id', user.id)
-      .maybeSingle() // Use maybeSingle to avoid 500 error if profile missing
+      .eq('id', currentUser.id)
+      .maybeSingle() // Use maybeSingle() to prevent crash if row missing
     
-    currentUserRole = profile?.role ? String(profile.role) : 'user'
-  } catch (err) {
-    console.error("Profile check failed", err)
+    currentUserRole = profile?.role || 'user'
+
+    // 4. Safe List Fetching
+    if (currentUserRole === 'admin') {
+        const { data: listData, error: listError } = await supabase
+            .from('profiles')
+            .select('*')
+            .order('created_at', { ascending: false })
+        
+        if (listError) throw listError
+        profiles = listData || []
+    }
+
+  } catch (err: any) {
+    // Catch ANY crash and save the message to display safely
+    dbError = err.message || "Unknown system error"
   }
 
-  // 4. Security Block
+  // 5. Handle Redirects (Outside try/catch)
+  if (!currentUser) {
+    redirect('/login')
+  }
+
+  // 6. Security View
   if (currentUserRole !== 'admin') {
     return (
       <div className="flex flex-col items-center justify-center h-[50vh] text-red-600">
@@ -51,23 +69,6 @@ export default async function UserManagementPage({
         <p className="text-xs text-gray-500 mt-4">Your Role: {currentUserRole}</p>
       </div>
     )
-  }
-
-  // 5. Fetch All Profiles (Safe Mode)
-  try {
-    const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false })
-    
-    if (error) {
-        dbErrorMsg = error.message
-    } else {
-        profiles = data || []
-    }
-  } catch (err: any) {
-    dbErrorMsg = err.message || "Unknown database error"
-    profiles = []
   }
 
   return (
@@ -82,21 +83,20 @@ export default async function UserManagementPage({
         </div>
       </div>
 
-      {/* ERROR DISPLAY (Safe) */}
-      {errorMessage && (
+      {/* URL ERROR */}
+      {errorMsg && (
         <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md flex items-center gap-2">
-            <AlertCircle size={18} /> 
-            <span>{errorMessage}</span>
+            <AlertCircle size={18} /> {errorMsg}
         </div>
       )}
 
-      {/* DATABASE ERROR DISPLAY */}
-      {dbErrorMsg && (
+      {/* SYSTEM/DB ERROR (Caught Safely) */}
+      {dbError && (
         <div className="p-4 bg-orange-50 text-orange-800 border border-orange-200 rounded-md flex items-center gap-2">
             <AlertTriangle size={20} />
             <div>
-                <p className="font-bold">Database Error</p>
-                <p className="text-sm">{String(dbErrorMsg)}</p>
+                <p className="font-bold">System Warning</p>
+                <p className="text-sm">{dbError}</p>
             </div>
         </div>
       )}
@@ -134,14 +134,14 @@ export default async function UserManagementPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {profiles.map((profile) => (
+              {(profiles || []).map((profile) => (
                 <tr key={profile.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="font-bold text-gray-900">{profile.email}</div>
                     <div className="text-xs text-gray-400">ID: {String(profile.id).slice(0,8)}...</div>
                   </td>
                   
-                  {/* APPROVAL STATUS */}
+                  {/* STATUS */}
                   <td className="px-4 py-3 text-center">
                    {profile.is_approved ? (
                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">
@@ -154,15 +154,14 @@ export default async function UserManagementPage({
                    )}
                   </td>
                   
-                  {/* DYNAMIC ROLE EDITOR */}
+                  {/* ROLE EDITOR */}
                   <td className="px-4 py-3">
                     <RoleEditor userId={profile.id} initialRole={profile.role || 'user'} />
                   </td>
 
                   {/* ACTIONS */}
                   <td className="px-4 py-3 text-center flex items-center justify-center gap-2">
-                    {/* Approval Toggle */}
-                    {profile.id !== user.id && (
+                    {profile.id !== currentUser.id && (
                         <form action={toggleApproval}>
                           <input type="hidden" name="id" value={profile.id} />
                           <input type="hidden" name="current_status" value={String(profile.is_approved)} />
@@ -175,8 +174,7 @@ export default async function UserManagementPage({
                         </form>
                     )}
 
-                    {/* Delete */}
-                    {profile.id !== user.id && (
+                    {profile.id !== currentUser.id && (
                       <form action={deleteUser} onSubmit={(e) => { if(!confirm('Delete this user?')) e.preventDefault() }}>
                         <input type="hidden" name="id" value={profile.id} />
                         <button className="text-gray-300 hover:text-red-600 p-1 rounded hover:bg-red-50" title="Delete"><Trash2 size={16} /></button>
@@ -186,11 +184,11 @@ export default async function UserManagementPage({
                 </tr>
               ))}
               
-              {/* EMPTY STATE */}
-              {(!profiles || profiles.length === 0) && (
+              {/* EMPTY STATE (Safe) */}
+              {profiles.length === 0 && (
                   <tr>
                       <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
-                          No users found.
+                          {dbError ? "System encountered an error loading users." : "No users found."}
                       </td>
                   </tr>
               )}
