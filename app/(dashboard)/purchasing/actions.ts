@@ -9,7 +9,9 @@ async function checkPermissions() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user?.id).single()
+    if (!user) throw new Error("Not authenticated")
+
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
     const role = profile?.role || 'user'
     
     if (role !== 'admin' && role !== 'manager') {
@@ -21,7 +23,7 @@ async function checkPermissions() {
 // 1. SUPPLIER ACTIONS
 export async function createSupplier(formData: FormData) {
   try {
-    const { supabase } = await checkPermissions()
+    const { supabase, user } = await checkPermissions()
     const name = formData.get('name') as string
     const contact = formData.get('contact') as string
     const email = formData.get('email') as string
@@ -30,8 +32,17 @@ export async function createSupplier(formData: FormData) {
     const tin_number = formData.get('tin_number') as string
     const currency = formData.get('currency') as string
 
-    const { error } = await supabase.from('suppliers').insert({ name, contact_person: contact, email, phone, address, tin_number, currency })
+    const { data: newSup, error } = await supabase.from('suppliers')
+        .insert({ name, contact_person: contact, email, phone, address, tin_number, currency })
+        .select('id').single()
+
     if (error) throw error
+
+    await supabase.from('user_logs').insert({
+        user_email: user.email, action: 'CREATE_SUPPLIER', details: `Added supplier ${name}`,
+        resource_type: 'Purchasing', resource_id: newSup.id, severity: 'info'
+    })
+
   } catch (err: any) {
     return redirect(`/purchasing/suppliers/new?error=${encodeURIComponent(err.message)}`)
   }
@@ -41,7 +52,7 @@ export async function createSupplier(formData: FormData) {
 export async function updateSupplier(formData: FormData) {
   const id = formData.get('id') as string
   try {
-    const { supabase } = await checkPermissions()
+    const { supabase, user } = await checkPermissions()
     const name = formData.get('name') as string
     const contact = formData.get('contact') as string
     const email = formData.get('email') as string
@@ -50,8 +61,15 @@ export async function updateSupplier(formData: FormData) {
     const tin_number = formData.get('tin_number') as string
     const currency = formData.get('currency') as string
 
-    const { error } = await supabase.from('suppliers').update({ name, contact_person: contact, email, phone, address, tin_number, currency }).eq('id', id)
+    const { error } = await supabase.from('suppliers')
+        .update({ name, contact_person: contact, email, phone, address, tin_number, currency }).eq('id', id)
     if (error) throw error
+
+    await supabase.from('user_logs').insert({
+        user_email: user.email, action: 'UPDATE_SUPPLIER', details: `Updated supplier ${name}`,
+        resource_type: 'Purchasing', resource_id: id, severity: 'info'
+    })
+
   } catch (err: any) {
     return redirect(`/purchasing/suppliers/${id}?error=${encodeURIComponent(err.message)}`)
   }
@@ -84,6 +102,12 @@ export async function createPurchase(formData: FormData) {
 
     if (error) throw error
     newId = newPurchase.id
+
+    await supabase.from('user_logs').insert({
+        user_email: user.email, action: 'CREATE_PO', details: `Created PO ${docNumber}`,
+        resource_type: 'Purchasing', resource_id: newId, severity: 'info'
+    })
+
   } catch (err: any) {
     return redirect(`/purchasing/new?error=${encodeURIComponent(err.message)}`)
   }
@@ -129,9 +153,15 @@ export async function removeItemFromPurchase(formData: FormData) {
 export async function completePurchase(formData: FormData) {
   const purchaseId = formData.get('purchase_id') as string
   try {
-    const { supabase } = await checkPermissions()
+    const { supabase, user } = await checkPermissions()
     const { error } = await supabase.from('purchases').update({ status: 'Ordered' }).eq('id', purchaseId)
     if (error) throw error
+
+    await supabase.from('user_logs').insert({
+        user_email: user.email, action: 'CONFIRM_PO', details: `Confirmed Order for PO ID: ${purchaseId}`,
+        resource_type: 'Purchasing', resource_id: purchaseId, severity: 'warning'
+    })
+
   } catch (err: any) {
     return redirect(`/purchasing/${purchaseId}?error=${encodeURIComponent(err.message)}`)
   }

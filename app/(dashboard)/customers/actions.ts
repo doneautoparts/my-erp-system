@@ -4,28 +4,22 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
-// --- SECURITY GUARD ---
 async function checkPermissions() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user?.id)
-        .single()
-    
+    if(!user) throw new Error("No User")
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
     const role = profile?.role || 'user'
     
     if (role !== 'admin' && role !== 'manager') {
-        throw new Error("Unauthorized: View Only Access. Contact Manager.")
+        throw new Error("Unauthorized: View Only.")
     }
-    return supabase
+    return { supabase, user }
 }
 
 export async function createCustomer(formData: FormData) {
   try {
-    const supabase = await checkPermissions() // <--- SECURITY CHECK
+    const { supabase, user } = await checkPermissions()
 
     const data = {
       name: formData.get('name') as string,
@@ -37,9 +31,14 @@ export async function createCustomer(formData: FormData) {
       tin_number: formData.get('tin_number') as string,
     }
 
-    const { error } = await supabase.from('customers').insert(data)
-
+    const { data: newCust, error } = await supabase.from('customers').insert(data).select('id').single()
     if (error) throw new Error(error.message)
+
+    // LOG
+    await supabase.from('user_logs').insert({
+        user_email: user.email, action: 'CREATE_CUSTOMER', details: `Added customer ${data.name}`,
+        resource_type: 'Customer', resource_id: newCust.id, severity: 'info'
+    })
 
   } catch (err: any) {
     return redirect(`/customers/new?error=${encodeURIComponent(err.message)}`)
@@ -53,7 +52,7 @@ export async function updateCustomer(formData: FormData) {
   const id = formData.get('id') as string
 
   try {
-    const supabase = await checkPermissions() // <--- SECURITY CHECK
+    const { supabase, user } = await checkPermissions()
 
     const data = {
       name: formData.get('name') as string,
@@ -66,8 +65,13 @@ export async function updateCustomer(formData: FormData) {
     }
 
     const { error } = await supabase.from('customers').update(data).eq('id', id)
-
     if (error) throw new Error(error.message)
+
+    // LOG
+    await supabase.from('user_logs').insert({
+        user_email: user.email, action: 'UPDATE_CUSTOMER', details: `Updated customer ${data.name}`,
+        resource_type: 'Customer', resource_id: id, severity: 'info'
+    })
 
   } catch (err: any) {
     return redirect(`/customers/${id}?error=${encodeURIComponent(err.message)}`)

@@ -9,10 +9,12 @@ async function checkPermissions() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
+    if (!user) throw new Error("Not authenticated")
+
     const { data: profile } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', user?.id)
+        .eq('id', user.id)
         .single()
     
     const role = profile?.role || 'user'
@@ -20,14 +22,14 @@ async function checkPermissions() {
     if (role !== 'admin' && role !== 'manager') {
         throw new Error("Unauthorized: View Only Access. Contact Manager.")
     }
-    return supabase
+    return { supabase, user }
 }
 
 // --- 1. CREATE NEW ITEM ---
 export async function createItem(formData: FormData) {
   let errorMsg = null
   try {
-      const supabase = await checkPermissions()
+      const { supabase, user } = await checkPermissions()
       
       const brandName = formData.get('brand') as string
       const productName = formData.get('product_name') as string
@@ -60,7 +62,6 @@ export async function createItem(formData: FormData) {
       if (!brandId) {
         const { data: newBrand, error: brandError } = await supabase.from('brands').insert({ name: brandName.trim() }).select('id').single()
         if (brandError) throw new Error(`Brand Error: ${brandError.message}`)
-        if (!newBrand) throw new Error("Failed to create brand")
         brandId = newBrand.id
       }
 
@@ -71,33 +72,27 @@ export async function createItem(formData: FormData) {
       if (!productId) {
         const { data: newProduct, error: productError } = await supabase.from('products').insert({ brand_id: brandId, name: productName.trim(), category: category }).select('id').single()
         if (productError) throw new Error(`Product Error: ${productError.message}`)
-        if (!newProduct) throw new Error("Failed to create product")
         productId = newProduct.id
       }
 
-      // FIX: Changed 'part_number' to 'part_number: partNumber'
-      const { error: variantError } = await supabase.from('variants').insert({
-          product_id: productId, 
-          item_code: itemCode, 
-          name: variantName, 
-          position, 
-          type, 
-          part_number: partNumber, 
-          sku,
-          cost_rm: costRm, 
-          cost_usd: costUsd, 
-          price_myr: priceSell, 
-          price_online: priceOnline, 
-          price_proposal: priceProposal,
-          stock_quantity: stock, 
-          min_stock_level: minStock, 
-          packing_ratio: packingRatio,
-          ctn_qty: ctnQty, 
-          ctn_len: ctnLen, 
-          ctn_wid: ctnWid, 
-          ctn_height: ctnHeight
-      })
+      const { data: newVariant, error: variantError } = await supabase.from('variants').insert({
+          product_id: productId, item_code: itemCode, name: variantName, position, type, part_number: partNumber, sku,
+          cost_rm: costRm, cost_usd: costUsd, price_myr: priceSell, price_online: priceOnline, price_proposal: priceProposal,
+          stock_quantity: stock, min_stock_level: minStock, packing_ratio: packingRatio,
+          ctn_qty: ctnQty, ctn_len: ctnLen, ctn_wid: ctnWid, ctn_height: ctnHeight
+      }).select('id').single()
+
       if (variantError) throw new Error(variantError.message)
+
+      // LOGGING
+      await supabase.from('user_logs').insert({
+        user_email: user.email,
+        action: 'CREATE_ITEM',
+        details: `Created item ${itemCode} (${brandName} ${productName})`,
+        resource_type: 'Inventory',
+        resource_id: newVariant.id,
+        severity: 'info'
+      })
 
   } catch (err: any) {
       errorMsg = err.message
@@ -113,7 +108,7 @@ export async function updateItem(formData: FormData) {
   const id = formData.get('id') as string
 
   try {
-      const supabase = await checkPermissions()
+      const { supabase, user } = await checkPermissions()
       
       const oldProductId = formData.get('product_id') as string
       const productName = (formData.get('product_name') as string).trim()
@@ -149,37 +144,31 @@ export async function updateItem(formData: FormData) {
               targetProductId = existingTargetProduct.id;
           } else {
               const { data: newProduct } = await supabase.from('products').insert({ brand_id: currentProduct.brand_id, name: productName, category: category }).select('id').single();
-              if (!newProduct) throw new Error("Failed to create product group");
+              if (!newProduct) throw new Error("Failed to create product group"); 
               targetProductId = newProduct.id;
           }
       } else {
           await supabase.from('products').update({ category }).eq('id', targetProductId);
       }
 
-      // FIX: Changed 'part_number' to 'part_number: partNumber'
       const { error } = await supabase.from('variants').update({
-          product_id: targetProductId, 
-          item_code: itemCode, 
-          name: variantName, 
-          position, 
-          type, 
-          part_number: partNumber, 
-          sku,
-          cost_rm: costRm, 
-          cost_usd: costUsd, 
-          price_myr: priceSell, 
-          price_online: priceOnline, 
-          price_proposal: priceProposal,
-          stock_quantity: stock, 
-          min_stock_level: minStock, 
-          packing_ratio: packingRatio,
-          ctn_qty: ctnQty, 
-          ctn_len: ctnLen, 
-          ctn_wid: ctnWid, 
-          ctn_height: ctnHeight
+          product_id: targetProductId, item_code: itemCode, name: variantName, position, type, part_number: partNumber, sku,
+          cost_rm: costRm, cost_usd: costUsd, price_myr: priceSell, price_online: priceOnline, price_proposal: priceProposal,
+          stock_quantity: stock, min_stock_level: minStock, packing_ratio: packingRatio,
+          ctn_qty: ctnQty, ctn_len: ctnLen, ctn_wid: ctnWid, ctn_height: ctnHeight
       }).eq('id', id)
       
       if (error) throw new Error(error.message)
+
+      // LOGGING
+      await supabase.from('user_logs').insert({
+        user_email: user.email,
+        action: 'UPDATE_ITEM',
+        details: `Updated details for ${itemCode}`,
+        resource_type: 'Inventory',
+        resource_id: id,
+        severity: 'info'
+      })
 
   } catch (err: any) {
       errorMsg = err.message
@@ -192,7 +181,7 @@ export async function updateItem(formData: FormData) {
 // --- 3. QUICK INLINE UPDATE ---
 export async function quickUpdateVariant(formData: FormData) {
   try {
-    const supabase = await checkPermissions()
+    const { supabase, user } = await checkPermissions()
     
     const id = formData.get('id') as string
     const updates = {
@@ -209,6 +198,16 @@ export async function quickUpdateVariant(formData: FormData) {
     const { error } = await supabase.from('variants').update(updates).eq('id', id)
     if (error) throw new Error(error.message)
 
+    // LOGGING
+    await supabase.from('user_logs').insert({
+      user_email: user.email,
+      action: 'QUICK_UPDATE',
+      details: `Inline update for ${updates.item_code}`,
+      resource_type: 'Inventory',
+      resource_id: id,
+      severity: 'info'
+    })
+
     revalidatePath('/inventory')
     return { success: true }
   } catch (err: any) {
@@ -219,11 +218,21 @@ export async function quickUpdateVariant(formData: FormData) {
 // --- 4. DELETE ITEM ---
 export async function deleteItem(formData: FormData) {
   try {
-    const supabase = await checkPermissions()
+    const { supabase, user } = await checkPermissions()
     const id = formData.get('id') as string
 
     const { error } = await supabase.from('variants').delete().eq('id', id)
     if (error) throw new Error(error.message)
+
+    // LOGGING
+    await supabase.from('user_logs').insert({
+      user_email: user.email,
+      action: 'DELETE_ITEM',
+      details: `Deleted inventory item ID: ${id}`,
+      resource_type: 'Inventory',
+      resource_id: id,
+      severity: 'warning'
+    })
 
     revalidatePath('/inventory')
     return { success: true }
