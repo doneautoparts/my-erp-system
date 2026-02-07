@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, AlertCircle } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 import { createPayment } from '../actions'
 
@@ -8,11 +8,12 @@ export default async function NewPaymentPage({
 }: {
   searchParams: Promise<{ error?: string, sale_id?: string }>
 }) {
+  // FIX: Properly await searchParams
   const { error, sale_id } = await searchParams
+  
   const supabase = await createClient()
   const today = new Date().toISOString().split('T')[0]
 
-  // Fetch Unpaid/Partial Sales
   const { data: sales } = await supabase
     .from('sales')
     .select('id, reference_no, customer_name, total_amount, paid_amount, customers(name)')
@@ -27,7 +28,18 @@ export default async function NewPaymentPage({
         <h1 className="text-2xl font-bold text-gray-900">Record Payment</h1>
       </div>
 
-      {error && <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md">{error}</div>}
+      {/* ERROR DISPLAY BOX */}
+      {error && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 shadow-sm animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-6 w-6 text-red-600" />
+            <div>
+              <p className="font-bold text-red-800">Action Failed</p>
+              <p className="text-sm text-red-700">{decodeURIComponent(error)}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <form action={createPayment} className="bg-white p-8 rounded-lg shadow border border-gray-200 space-y-6">
         
@@ -41,15 +53,11 @@ export default async function NewPaymentPage({
             className="mt-1 block w-full rounded-md border border-gray-300 p-3 bg-white"
           >
             <option value="">-- Choose Invoice --</option>
-            {/* FIX: Added (s: any) to bypass TypeScript strict array/object check */}
             {sales?.map((s: any) => {
               const balance = (s.total_amount || 0) - (s.paid_amount || 0)
               const isPaid = balance <= 0
               
-              // Handle potential array vs object structure for customers
-              const custName = Array.isArray(s.customers) 
-                ? s.customers[0]?.name 
-                : s.customers?.name
+              const custName = Array.isArray(s.customers) ? s.customers[0]?.name : s.customers?.name
 
               return (
                 <option key={s.id} value={s.id} className={isPaid ? 'text-green-600' : 'text-red-600'}>

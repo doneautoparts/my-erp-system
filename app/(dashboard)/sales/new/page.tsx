@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Save, AlertCircle } from 'lucide-react'
 import { createSale } from '../actions'
 import { SubmitButton } from './submit-button'
 import { createClient } from '@/utils/supabase/server'
@@ -9,6 +9,9 @@ export default async function NewSalePage({
 }: {
   searchParams: Promise<{ error?: string }>
 }) {
+  // FIX: Properly await the search params to read the error from URL
+  const { error } = await searchParams
+  
   const today = new Date().toISOString().split('T')[0]
   
   const supabase = await createClient()
@@ -24,6 +27,19 @@ export default async function NewSalePage({
         <h1 className="text-2xl font-bold text-gray-900">Create New Sale</h1>
       </div>
 
+      {/* ERROR DISPLAY BOX */}
+      {error && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 shadow-sm animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-6 w-6 text-red-600" />
+            <div>
+              <p className="font-bold text-red-800">Action Failed</p>
+              <p className="text-sm text-red-700">{decodeURIComponent(error)}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <form action={createSale} className="bg-white p-8 rounded-lg shadow border border-gray-200 space-y-6">
         
         <div className="space-y-4">
@@ -33,9 +49,8 @@ export default async function NewSalePage({
              <strong>Auto-Numbering:</strong> Invoice No (e.g. <strong>INV2602...</strong>) is auto-generated.
           </div>
 
-          {/* NEW COMPANY SELECTOR */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Issuing Company (Letterhead)</label>
+            <label className="block text-sm font-medium text-gray-700">Issuing Company</label>
             <select name="company_id" required className="mt-1 block w-full rounded-md border border-gray-300 p-3 bg-gray-50">
               {companies?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>

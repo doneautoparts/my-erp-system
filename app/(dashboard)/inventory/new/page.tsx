@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, AlertCircle } from 'lucide-react'
 import { createItem } from '../actions'
 import { SubmitButton } from './submit-button'
 import { createClient } from '@/utils/supabase/server'
@@ -9,10 +9,10 @@ export default async function NewItemPage({
 }: {
   searchParams: Promise<{ error?: string }>
 }) {
+  // FIX: Properly await searchParams
   const { error } = await searchParams
+  
   const supabase = await createClient()
-
-  // Fetch Brands for Datalist (The Dropdown)
   const { data: brands } = await supabase.from('brands').select('name').order('name')
 
   return (
@@ -24,9 +24,16 @@ export default async function NewItemPage({
         <h1 className="text-2xl font-bold text-gray-900">Add Inventory Item (Detailed)</h1>
       </div>
 
+      {/* ERROR DISPLAY BOX */}
       {error && (
-        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md">
-          <strong>Error:</strong> {error}
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 shadow-sm animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-6 w-6 text-red-600" />
+            <div>
+              <p className="font-bold text-red-800">Action Failed</p>
+              <p className="text-sm text-red-700">{decodeURIComponent(error)}</p>
+            </div>
+          </div>
         </div>
       )}
 

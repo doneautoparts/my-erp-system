@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, AlertCircle } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 import { createPurchase } from '../actions'
 import { SubmitButton } from './submit-button'
@@ -9,9 +9,10 @@ export default async function NewPurchasePage({
 }: {
   searchParams: Promise<{ error?: string }>
 }) {
+  // FIX: Properly await searchParams
   const { error } = await searchParams
-  const supabase = await createClient()
 
+  const supabase = await createClient()
   const { data: suppliers } = await supabase.from('suppliers').select('id, name, currency').order('name')
   const { data: companies } = await supabase.from('companies').select('id, name').order('name')
   const today = new Date().toISOString().split('T')[0]
@@ -25,7 +26,18 @@ export default async function NewPurchasePage({
         <h1 className="text-2xl font-bold text-gray-900">Create Purchase Order</h1>
       </div>
 
-      {error && <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md">{error}</div>}
+      {/* ERROR DISPLAY BOX */}
+      {error && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 shadow-sm animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-6 w-6 text-red-600" />
+            <div>
+              <p className="font-bold text-red-800">Action Failed</p>
+              <p className="text-sm text-red-700">{decodeURIComponent(error)}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <form action={createPurchase} className="bg-white p-8 rounded-lg shadow border border-gray-200 space-y-6">
         
