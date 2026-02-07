@@ -60,7 +60,7 @@ export async function createItem(formData: FormData) {
       if (!brandId) {
         const { data: newBrand, error: brandError } = await supabase.from('brands').insert({ name: brandName.trim() }).select('id').single()
         if (brandError) throw new Error(`Brand Error: ${brandError.message}`)
-        if (!newBrand) throw new Error("Failed to create brand") // FIX: Null check
+        if (!newBrand) throw new Error("Failed to create brand")
         brandId = newBrand.id
       }
 
@@ -71,15 +71,31 @@ export async function createItem(formData: FormData) {
       if (!productId) {
         const { data: newProduct, error: productError } = await supabase.from('products').insert({ brand_id: brandId, name: productName.trim(), category: category }).select('id').single()
         if (productError) throw new Error(`Product Error: ${productError.message}`)
-        if (!newProduct) throw new Error("Failed to create product") // FIX: Null check
+        if (!newProduct) throw new Error("Failed to create product")
         productId = newProduct.id
       }
 
+      // FIX: Changed 'part_number' to 'part_number: partNumber'
       const { error: variantError } = await supabase.from('variants').insert({
-          product_id: productId, item_code: itemCode, name: variantName, position, type, part_number, sku,
-          cost_rm: costRm, cost_usd: costUsd, price_myr: priceSell, price_online: priceOnline, price_proposal: priceProposal,
-          stock_quantity: stock, min_stock_level: minStock, packing_ratio: packingRatio,
-          ctn_qty: ctnQty, ctn_len: ctnLen, ctn_wid: ctnWid, ctn_height: ctnHeight
+          product_id: productId, 
+          item_code: itemCode, 
+          name: variantName, 
+          position, 
+          type, 
+          part_number: partNumber, 
+          sku,
+          cost_rm: costRm, 
+          cost_usd: costUsd, 
+          price_myr: priceSell, 
+          price_online: priceOnline, 
+          price_proposal: priceProposal,
+          stock_quantity: stock, 
+          min_stock_level: minStock, 
+          packing_ratio: packingRatio,
+          ctn_qty: ctnQty, 
+          ctn_len: ctnLen, 
+          ctn_wid: ctnWid, 
+          ctn_height: ctnHeight
       })
       if (variantError) throw new Error(variantError.message)
 
@@ -132,20 +148,35 @@ export async function updateItem(formData: FormData) {
           if (existingTargetProduct) {
               targetProductId = existingTargetProduct.id;
           } else {
-              const { data: newProduct, error: createError } = await supabase.from('products').insert({ brand_id: currentProduct.brand_id, name: productName, category: category }).select('id').single();
-              if (createError) throw new Error(createError.message);
-              if (!newProduct) throw new Error("Failed to create new product group"); // FIX
+              const { data: newProduct } = await supabase.from('products').insert({ brand_id: currentProduct.brand_id, name: productName, category: category }).select('id').single();
+              if (!newProduct) throw new Error("Failed to create product group");
               targetProductId = newProduct.id;
           }
       } else {
           await supabase.from('products').update({ category }).eq('id', targetProductId);
       }
 
+      // FIX: Changed 'part_number' to 'part_number: partNumber'
       const { error } = await supabase.from('variants').update({
-          product_id: targetProductId, item_code: itemCode, name: variantName, position, type, part_number, sku,
-          cost_rm: costRm, cost_usd: costUsd, price_myr: priceSell, price_online: priceOnline, price_proposal: priceProposal,
-          stock_quantity: stock, min_stock_level: minStock, packing_ratio: packingRatio,
-          ctn_qty: ctnQty, ctn_len: ctnLen, ctn_wid: ctnWid, ctn_height: ctnHeight
+          product_id: targetProductId, 
+          item_code: itemCode, 
+          name: variantName, 
+          position, 
+          type, 
+          part_number: partNumber, 
+          sku,
+          cost_rm: costRm, 
+          cost_usd: costUsd, 
+          price_myr: priceSell, 
+          price_online: priceOnline, 
+          price_proposal: priceProposal,
+          stock_quantity: stock, 
+          min_stock_level: minStock, 
+          packing_ratio: packingRatio,
+          ctn_qty: ctnQty, 
+          ctn_len: ctnLen, 
+          ctn_wid: ctnWid, 
+          ctn_height: ctnHeight
       }).eq('id', id)
       
       if (error) throw new Error(error.message)
