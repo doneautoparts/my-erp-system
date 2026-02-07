@@ -87,7 +87,7 @@ export default function RoleEditor({
                 ? 'bg-gray-100 text-gray-500' 
                 : hasChanges
                     ? 'bg-blue-600 text-white shadow-sm hover:bg-blue-500 hover:scale-105' // Highlight when ready to save
-                    : 'text-gray-300' // Ghost when no changes
+                    : 'text-gray-300' // Ghost when no changes only
         }`}
         title={hasChanges ? "Click to Save" : "No changes"}
       >
