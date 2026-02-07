@@ -64,7 +64,6 @@ export default function ShipmentSimulator({
   const [globalTier, setGlobalTier] = useState<"sell" | "online" | "proposal">("proposal")
   const [scenarioName, setScenarioName] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [loadedDraftId, setLoadedDraftId] = useState("") // New state to track loaded ID for deletion
 
   // --- SAFE FILTERS ---
   const safeVariants = Array.isArray(variants) ? variants : []
@@ -120,13 +119,6 @@ export default function ShipmentSimulator({
   const updateOrderRow = (id: number, field: string, value: any) => {
     setOrderItems(prev => prev.map(item => {
       if (item.uniqueId !== id) return item;
-      if (field === 'selectedTier') {
-        let newPrice = item.targetPrice;
-        if (value === 'sell') newPrice = item.origSell;
-        else if (value === 'online') newPrice = item.origOnline;
-        else if (value === 'proposal') newPrice = item.origProposal;
-        return { ...item, selectedTier: value, targetPrice: newPrice };
-      }
       if (field === 'targetPrice') return { ...item, targetPrice: value, selectedTier: 'manual' };
       return { ...item, [field]: value };
     }))
@@ -135,7 +127,7 @@ export default function ShipmentSimulator({
   const handleReset = () => {
     if (orderItems.length > 0 && !confirm("Clear all data?")) return
     setOrderItems([]); setScenarioName(""); setExchangeRate(DEFAULT_RATE); setOceanLumpSum(5000); setTruckingLumpSum(800); setIsFormE(true); setManualDutyPct(10); setConsumable(2.00); setLicense(0.30);
-    setSelectedBrand(""); setSelectedProduct(""); setSelectedVariantId(""); setQty(1); setLoadedDraftId("");
+    setSelectedBrand(""); setSelectedProduct(""); setSelectedVariantId(""); setQty(1);
   }
 
   const handleGlobalTierChange = (newTier: "sell" | "online" | "proposal") => {
@@ -160,7 +152,6 @@ export default function ShipmentSimulator({
   const handleLoad = async (id: string) => {
     if(!confirm("Load draft?")) return
     setIsLoading(true)
-    setLoadedDraftId(id)
     const { scenario, items } = await getScenario(id)
     if (scenario) {
       setExchangeRate(scenario.exchange_rate ?? DEFAULT_RATE); setOceanLumpSum(scenario.ocean_lump_sum ?? 5000); setTruckingLumpSum(scenario.trucking_lump_sum ?? 800); setIsFormE(scenario.is_form_e ?? true); setManualDutyPct(scenario.manual_duty_pct ?? 10); setConsumable(scenario.consumable ?? 2.00); setLicense(scenario.license ?? 0.30); setScenarioName(scenario.name)
@@ -173,21 +164,10 @@ export default function ShipmentSimulator({
     setIsLoading(false)
   }
 
-  // NEW: Delete Draft Function
-  const handleDeleteDraft = async () => {
-      if(!loadedDraftId) return alert("No draft selected to delete.")
-      if(!confirm("Are you sure you want to permanently delete this draft from the database?")) return
-      
-      setIsLoading(true)
-      await deleteScenario(loadedDraftId)
-      handleReset() // Clear screen
-      setIsLoading(false)
-      router.refresh() // Update list
-  }
-
   // --- ENGINE: CALCULATIONS ---
   const calculation = useMemo(() => {
     let totalCBM = 0, totalFOB_RM = 0, totalFOB_USD = 0, totalExactCartons = 0, totalQty = 0
+    let totalProjectedProfit = 0 // NEW: Total Profit Tracker
 
     const rowsWithVolume = orderItems.map(item => {
       const safeItem = item || {}
@@ -222,19 +202,35 @@ export default function ShipmentSimulator({
     const finalRows = rowsWithVolume.map(item => {
       const cbmShare = totalCBM > 0 ? (item.totalItemCBM / totalCBM) : 0
       const allocatedLogistics = (item.orderQty > 0) ? (cbmShare * totalLogisticsLumpSum) / item.orderQty : 0
-      const valueShare = totalFOB_RM > 0 ? (item.unitFobRM * item.orderQty / totalFOB_RM) : 0
+      const valueShare = totalFOB_RM > 0 ? (item.totalItemFobRM / totalFOB_RM) : 0
       const allocatedSST = (item.orderQty > 0) ? (valueShare * totalSST) / item.orderQty : 0
       const unitDuty = item.unitFobRM * dutyRate
       const landedCost = item.unitFobRM + allocatedLogistics + unitDuty + allocatedSST + consumable + license
+      
+      // Calculate Profit per Unit
       const grossProfit = (item.targetPrice || 0) - landedCost
       const margin = (item.targetPrice || 0) > 0 ? (grossProfit / item.targetPrice) * 100 : 0
+      
+      // Calculate Total Profit for this row
+      const rowTotalProfit = grossProfit * item.orderQty
+      totalProjectedProfit += rowTotalProfit
 
       return { ...item, landedCost, grossProfit, margin, isLowMargin: margin < 20 }
     })
 
     return {
       rows: finalRows,
-      totals: { qty: totalQty, cbm: totalCBM, cartons: totalExactCartons, fobRM: totalFOB_RM, fobUSD: totalFOB_USD, logistics: totalLogisticsLumpSum, sst: totalSST, cashOutlay: totalFOB_RM + totalLogisticsLumpSum + totalSST + (totalFOB_RM * dutyRate) }
+      totals: { 
+          qty: totalQty, 
+          cbm: totalCBM, 
+          cartons: totalExactCartons, 
+          fobRM: totalFOB_RM, 
+          fobUSD: totalFOB_USD, 
+          logistics: totalLogisticsLumpSum, 
+          sst: totalSST, 
+          cashOutlay: totalFOB_RM + totalLogisticsLumpSum + totalSST + (totalFOB_RM * dutyRate),
+          projectedProfit: totalProjectedProfit // NEW
+      }
     }
   }, [orderItems, exchangeRate, oceanLumpSum, truckingLumpSum, isFormE, manualDutyPct, consumable, license])
 
@@ -286,18 +282,12 @@ export default function ShipmentSimulator({
         <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 flex flex-wrap items-center justify-between gap-3 print-hidden">
             <div className="flex items-center gap-2">
                 <FolderOpen className="text-gray-500" size={20} />
-                <select className="border rounded text-sm p-1 max-w-[200px]" onChange={(e) => { if(e.target.value) handleLoad(e.target.value) }} value={loadedDraftId}>
+                <select className="border rounded text-sm p-1 max-w-[200px]" onChange={(e) => { if(e.target.value) handleLoad(e.target.value) }} defaultValue="">
                     <option value="" disabled>-- Load Draft --</option>
                     {(savedScenarios || []).map((s: any) => (
                         <option key={s.id} value={s.id}>{s.name} ({new Date(s.created_at).toLocaleDateString()})</option>
                     ))}
                 </select>
-                {/* DELETE BUTTON - Only shows if a draft is currently selected */}
-                {loadedDraftId && (
-                    <button onClick={handleDeleteDraft} className="flex items-center gap-1 bg-red-100 text-red-600 px-3 py-1 rounded text-sm hover:bg-red-200 border border-red-200">
-                        <Trash2 size={14} /> Delete
-                    </button>
-                )}
                 <button onClick={handleReset} className="flex items-center gap-1 bg-gray-100 text-gray-600 px-3 py-1 rounded text-sm hover:text-red-600 border border-gray-300"><RotateCcw size={14} /> Reset</button>
             </div>
             <div className="flex items-center gap-2">
@@ -317,16 +307,17 @@ export default function ShipmentSimulator({
             </div>
         </div>
 
-        {/* KPI HEADER */}
+        {/* KPI HEADER (Added Profit Column) */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden print:border-2 print:border-black mb-6">
           <table className="min-w-full text-sm">
              <thead className="bg-gray-100 text-gray-700 uppercase font-bold text-xs border-b border-gray-300 print:bg-gray-200 print:text-black">
                 <tr>
-                   <th className="px-2 py-2 border-r text-center w-[12%]">Rate / Duty</th>
-                   <th className="px-2 py-2 border-r text-center w-[12%]">Qty</th>
-                   <th className="px-2 py-2 border-r text-center w-[15%]">Volume</th>
-                   <th className="px-2 py-2 border-r text-right w-[30%]">FOB Value</th>
-                   <th className="px-2 py-2 text-right w-[31%]">Total Costing</th>
+                   <th className="px-2 py-2 border-r text-center w-[10%]">Rate / Duty</th>
+                   <th className="px-2 py-2 border-r text-center w-[10%]">Qty</th>
+                   <th className="px-2 py-2 border-r text-center w-[12%]">Volume</th>
+                   <th className="px-2 py-2 border-r text-right w-[20%]">FOB Value</th>
+                   <th className="px-2 py-2 border-r text-right w-[24%]">Total Costing</th>
+                   <th className="px-2 py-2 text-right bg-green-50 text-green-900 w-[24%] print:bg-white print:text-black">Projected Profit</th>
                 </tr>
              </thead>
              <tbody className="text-gray-800">
@@ -338,13 +329,17 @@ export default function ShipmentSimulator({
                       {formatQty(calculation.totals.qty)}
                    </td>
                    <td className="px-2 py-2 border-r text-center">
-                      <div className="font-bold text-lg text-indigo-700 print:text-black">{(calculation.totals.cbm || 0).toFixed(2)} m³</div>
+                      <div className="font-bold text-lg text-indigo-700 print:text-black">{calculation.totals.cbm.toFixed(2)} m³</div>
                    </td>
                    <td className="px-2 py-2 border-r text-right">
                       <div className="font-bold text-blue-700 print:text-black">{formatUSD(calculation.totals.fobUSD)}</div>
                    </td>
-                   <td className="px-2 py-2 text-right font-bold text-orange-600 print:text-black">
+                   <td className="px-2 py-2 text-right font-bold text-orange-600 border-r print:text-black">
                       LOGS: {formatRM(calculation.totals.logistics)}
+                   </td>
+                   {/* TOTAL PROFIT CELL */}
+                   <td className="px-2 py-2 text-right font-bold text-xl text-green-700 bg-green-50 print:bg-white print:text-black">
+                      {formatRM(calculation.totals.projectedProfit)}
                    </td>
                 </tr>
                 <tr>
@@ -358,12 +353,17 @@ export default function ShipmentSimulator({
                    <td className="px-2 py-2 border-r text-right font-semibold text-gray-700">
                       {formatRM(calculation.totals.fobRM)}
                    </td>
-                   <td className="px-2 py-2 text-right">
+                   <td className="px-2 py-2 text-right border-r">
                       <div className="flex justify-between items-center text-xs mb-1">
                           <span className="text-gray-500">SST: {formatRM(calculation.totals.sst)}</span>
                           <span className="font-bold text-xl text-black bg-yellow-100 px-2 rounded print:bg-transparent">
                              {formatRM(calculation.totals.cashOutlay)}
                           </span>
+                      </div>
+                   </td>
+                   <td className="px-2 py-2 text-right bg-green-50 print:bg-white">
+                      <div className="text-xs text-green-800 italic print:text-black">
+                         (If sold at Target Price)
                       </div>
                    </td>
                 </tr>
@@ -409,21 +409,12 @@ export default function ShipmentSimulator({
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden print:border-2 print:border-black">
           <div className="flex justify-between items-center p-3 border-b bg-gray-50 print:bg-white print:border-black">
             <h3 className="font-bold text-gray-700">Shipment Manifest</h3>
-            
-            {/* GLOBAL PRICE SWITCHER */}
             <div className="flex gap-2 items-center print-hidden bg-gray-100 p-1 rounded-md">
-                <span className="text-xs font-bold text-gray-500 px-2">Set Price:</span>
-                <button onClick={() => handleGlobalTierChange('sell')} className={`px-2 py-1 text-xs rounded ${globalTier === 'sell' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>
-                    SELL
-                </button>
-                <button onClick={() => handleGlobalTierChange('online')} className={`px-2 py-1 text-xs rounded ${globalTier === 'online' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>
-                    ONLINE
-                </button>
-                <button onClick={() => handleGlobalTierChange('proposal')} className={`px-2 py-1 text-xs rounded ${globalTier === 'proposal' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>
-                    PROP
-                </button>
+                <span className="text-xs font-bold text-gray-500 px-2">Global Price:</span>
+                <button onClick={() => handleGlobalTierChange('sell')} className={`px-2 py-1 text-xs rounded ${globalTier === 'sell' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>SELL</button>
+                <button onClick={() => handleGlobalTierChange('online')} className={`px-2 py-1 text-xs rounded ${globalTier === 'online' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>ONLINE</button>
+                <button onClick={() => handleGlobalTierChange('proposal')} className={`px-2 py-1 text-xs rounded ${globalTier === 'proposal' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>PROP</button>
             </div>
-
             <div className="flex gap-2 print-hidden">
                 <button onClick={exportToCSV} className="flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-900 border border-green-200 px-2 py-1 rounded"><Download size={14} /> Excel</button>
                 <button onClick={handlePrint} className="flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-900 border border-blue-200 px-2 py-1 rounded"><Printer size={14} /> Print PDF</button>
@@ -455,12 +446,7 @@ export default function ShipmentSimulator({
                       <div className="text-gray-500 truncate max-w-[200px]">{row.name}</div>
                     </td>
                     <td className="px-2 py-2 text-center bg-yellow-50 print:bg-white">
-                      <input 
-                        type="number" 
-                        value={row.orderQty} 
-                        onChange={(e) => updateOrderRow(row.uniqueId, 'orderQty', parseInt(e.target.value))}
-                        className="w-12 text-center border rounded p-1 bg-white print-hidden"
-                      />
+                      <input type="number" value={row.orderQty} onChange={(e) => updateOrderRow(row.uniqueId, 'orderQty', parseInt(e.target.value))} className="w-12 text-center border rounded p-1 bg-white print-hidden" />
                       <span className="hidden print:inline">{row.orderQty}</span>
                     </td>
                     <td className="px-2 py-2 text-center bg-purple-50 print:bg-white font-medium">{(row.exactCartons || 0).toFixed(2)}</td>
@@ -468,18 +454,10 @@ export default function ShipmentSimulator({
                     <td className="px-2 py-2 text-right font-mono text-gray-600">{(row.unitFobUSD || 0) > 0 ? (row.unitFobUSD || 0).toFixed(2) : '-'}</td>
                     <td className="px-2 py-2 text-right font-mono text-gray-600">{(row.unitFobRM || 0).toFixed(2)}</td>
                     <td className="px-2 py-2 text-right font-bold text-blue-700 bg-blue-50 print:bg-white print:text-black">{(row.landedCost || 0).toFixed(2)}</td>
-                    
                     <td className="px-2 py-2 bg-green-50 print:bg-white">
-                       <input 
-                        type="number" 
-                        value={row.targetPrice} 
-                        onChange={(e) => updateOrderRow(row.uniqueId, 'targetPrice', parseFloat(e.target.value))}
-                        className="w-full text-right border rounded p-1 bg-white print-hidden font-bold"
-                        step="0.01"
-                      />
-                      <span className="hidden print:block text-right font-bold">{(row.targetPrice || 0).toFixed(2)}</span>
+                       <input type="number" value={row.targetPrice} onChange={(e) => updateOrderRow(row.uniqueId, 'targetPrice', parseFloat(e.target.value))} className="w-full text-right border rounded p-1 bg-white print-hidden font-bold" step="0.01" />
+                       <span className="hidden print:block text-right font-bold">{(row.targetPrice || 0).toFixed(2)}</span>
                     </td>
-
                     <td className={`px-2 py-2 text-right font-bold bg-green-50 print:bg-white ${(row.grossProfit || 0) > 0 ? 'text-green-700' : 'text-red-700'}`}>{(row.grossProfit || 0).toFixed(2)}</td>
                     <td className="px-2 py-2 text-right font-bold bg-green-50 print:bg-white">{(row.margin || 0).toFixed(1)}%</td>
                     <td className="px-2 py-2 text-center print-hidden"><button onClick={() => handleRemove(row.uniqueId)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button></td>
