@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
-import { Shield, Trash2, UserPlus, Save, AlertTriangle, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { Shield, Trash2, UserPlus, AlertTriangle, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import { deleteUser, toggleApproval, updateUserRole } from './actions'
 import RoleEditor from './role-editor'
 import { redirect } from 'next/navigation'
@@ -12,56 +12,39 @@ export default async function UserManagementPage({
   const { error } = await searchParams
   const supabase = await createClient()
   
-  let profiles: any[] = []
-  let fetchError = null
-  let currentUserRole = 'user'
-
-  // 1. Get Current User (Safe Check)
-  const { data: { user } } = await supabase.auth.getUser()
+  // 1. Get Current User safely
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
   
-  if (!user) {
+  if (authError || !user) {
     redirect('/login')
   }
 
-  // 2. Fetch Current User's Role (Safe Check)
-  try {
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-    
-    // If no profile found, default to 'user'
-    currentUserRole = profile?.role || 'user'
-  } catch (err) {
-    console.error("Error fetching current user profile", err)
-  }
+  // 2. Fetch Current User's Profile
+  const { data: currentUserProfile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  const currentUserRole = currentUserProfile?.role || 'user'
 
   // 3. Security Block
   if (currentUserRole !== 'admin') {
     return (
-      <div className="p-8 text-center text-red-600">
-        <Shield size={48} className="mx-auto mb-4" />
+      <div className="flex flex-col items-center justify-center h-[50vh] text-red-600">
+        <Shield size={48} className="mb-4" />
         <h1 className="text-2xl font-bold">Access Denied</h1>
-        <p>Only Admins can manage users.</p>
-        <p className="text-xs text-gray-500 mt-2">Current Role: {currentUserRole}</p>
+        <p className="mt-2">Only Admins can manage users.</p>
+        <p className="text-xs text-gray-500 mt-4">Your Role: {currentUserRole}</p>
       </div>
     )
   }
 
-  // 4. Fetch All Profiles (Safe Check)
-  try {
-    const { data, error: dbError } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false })
-    
-    if (dbError) throw dbError
-    profiles = data || []
-  } catch (err: any) {
-    fetchError = err.message
-    profiles = [] // Ensure it's an array so .map doesn't crash
-  }
+  // 4. Fetch All Profiles
+  const { data: profiles, error: dbError } = await supabase
+    .from('profiles')
+    .select('*')
+    .order('created_at', { ascending: false })
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
@@ -81,12 +64,12 @@ export default async function UserManagementPage({
         </div>
       )}
 
-      {fetchError && (
+      {dbError && (
         <div className="p-4 bg-orange-50 text-orange-800 border border-orange-200 rounded-md flex items-center gap-2">
             <AlertTriangle size={20} />
             <div>
                 <p className="font-bold">Database Error</p>
-                <p className="text-sm">{fetchError}</p>
+                <p className="text-sm">{dbError.message}</p>
             </div>
         </div>
       )}
@@ -133,7 +116,7 @@ export default async function UserManagementPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {profiles.map((profile) => (
+              {profiles?.map((profile) => (
                 <tr key={profile.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="font-bold text-gray-900">{profile.email}</div>
@@ -153,14 +136,14 @@ export default async function UserManagementPage({
                    )}
                   </td>
                   
-                  {/* DYNAMIC ROLE EDITOR */}
+                  {/* ROLE EDITOR */}
                   <td className="px-4 py-3">
                     <RoleEditor userId={profile.id} initialRole={profile.role || 'user'} />
                   </td>
 
                   {/* ACTIONS */}
                   <td className="px-4 py-3 text-center flex items-center justify-center gap-2">
-                    {/* Approval Toggle (Only if not self) */}
+                    {/* Approval Toggle */}
                     {profile.id !== user.id && (
                         <form action={toggleApproval}>
                           <input type="hidden" name="id" value={profile.id} />
@@ -174,7 +157,7 @@ export default async function UserManagementPage({
                         </form>
                     )}
 
-                    {/* Delete (Only if not self) */}
+                    {/* Delete */}
                     {profile.id !== user.id && (
                       <form action={deleteUser} onSubmit={(e) => { if(!confirm('Delete this user?')) e.preventDefault() }}>
                         <input type="hidden" name="id" value={profile.id} />
@@ -184,6 +167,15 @@ export default async function UserManagementPage({
                   </td>
                 </tr>
               ))}
+              
+              {/* EMPTY STATE */}
+              {(!profiles || profiles.length === 0) && (
+                  <tr>
+                      <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
+                          No users found (which is odd, since you are here).
+                      </td>
+                  </tr>
+              )}
             </tbody>
           </table>
         </div>
