@@ -1,78 +1,94 @@
 import { createClient } from '@/utils/supabase/server'
-import { ShieldAlert, Activity } from 'lucide-react'
+import { Activity, Trash2, Calendar, Search } from 'lucide-react'
+import { redirect } from 'next/navigation'
 
-export default async function AdminLogsPage() {
+export default async function AdminLogsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>
+}) {
+  const { q } = await searchParams
   const supabase = await createClient()
   
-  // 1. Check if User is Admin
+  // 1. Security Check
   const { data: { user } } = await supabase.auth.getUser()
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user?.id)
-    .single()
-
-  if (!profile || profile.role !== 'admin') {
-    return (
-      <div className="flex h-[50vh] flex-col items-center justify-center text-red-600 gap-4">
-        <ShieldAlert size={64} />
-        <h1 className="text-2xl font-bold">Access Denied</h1>
-        <p>You do not have permission to view System Logs.</p>
-      </div>
-    )
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user?.id).single()
+  
+  if (profile?.role !== 'admin') {
+    redirect('/')
   }
 
-  // 2. Fetch Logs
-  const { data: logs } = await supabase
+  // 2. Fetch Logs with Filter
+  let query = supabase
     .from('user_logs')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(100)
 
+  if (q) {
+    query = query.ilike('user_email', `%${q}%`)
+  }
+
+  const { data: logs } = await query
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <div className="p-3 bg-gray-800 rounded-full text-white">
-          <Activity size={24} />
-        </div>
-        <div>
-           <h1 className="text-2xl font-bold text-gray-900">System Audit Logs</h1>
-           <p className="text-sm text-gray-500">Tracking user activity (Last 100 records)</p>
+    <div className="space-y-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-slate-800 text-white rounded-lg">
+            <Activity size={24} />
+          </div>
+          <div>
+             <h1 className="text-2xl font-bold text-gray-900">System Audit Logs</h1>
+             <p className="text-sm text-gray-500">Tracking every critical system change (Last 90 days policy)</p>
+          </div>
         </div>
       </div>
 
-      <div className="bg-white shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      {/* SEARCH */}
+      <form className="relative max-w-sm">
+        <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
+        <input 
+            name="q"
+            defaultValue={q}
+            placeholder="Search by user email..." 
+            className="pl-10 w-full border rounded-lg p-2 text-sm"
+        />
+      </form>
+
+      <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50 border-b">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Details</th>
+              <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Timestamp</th>
+              <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">User</th>
+              <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Action</th>
+              <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Resource</th>
+              <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Details</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {logs?.map((log) => (
-              <tr key={log.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+          <tbody className="divide-y divide-gray-100">
+            {logs?.map((log: any) => (
+              <tr key={log.id} className="hover:bg-slate-50">
+                <td className="px-6 py-4 whitespace-nowrap text-gray-500 font-mono text-xs">
                   {new Date(log.created_at).toLocaleString()}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+                <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
                   {log.user_email}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">
-                  {log.action}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-bold uppercase">
+                    {log.action}
+                  </span>
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-600">
-                  {log.details || '-'}
+                <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
+                  {log.resource_type || '-'}
+                </td>
+                <td className="px-6 py-4 text-gray-600 text-xs">
+                  {log.details}
                 </td>
               </tr>
             ))}
-            {logs?.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-6 py-4 text-center text-gray-500">No logs found.</td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>

@@ -33,12 +33,15 @@ export async function login(formData: FormData) {
       redirect(`/login?error=Account pending Admin approval.`)
     }
 
-    // 3. Log the successful login
+    // 3. RICH LOGGING (Step 2 Implementation)
     try {
       await supabase.from('user_logs').insert({
         user_email: data.email,
         action: 'LOGIN',
-        details: 'User logged in successfully'
+        details: 'User logged in successfully',
+        resource_type: 'Auth',  // <--- NEW
+        resource_id: authData.user.id, // <--- NEW (Tracks the User ID)
+        severity: 'info' // <--- NEW
       })
     } catch (err) {
       console.error("Log error", err)
@@ -63,6 +66,16 @@ export async function signup(formData: FormData) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`)
   }
 
-  // Success message instead of direct login (since they need approval)
+  // LOG SIGNUP ATTEMPT
+  try {
+    await supabase.from('user_logs').insert({
+        user_email: data.email,
+        action: 'SIGNUP_ATTEMPT',
+        details: 'New user registered (pending approval)',
+        resource_type: 'Auth',
+        severity: 'warning'
+    })
+  } catch (err) { console.error(err) }
+
   redirect(`/login?error=Account created! Please wait for Admin approval.`)
 }
