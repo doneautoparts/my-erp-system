@@ -1,7 +1,8 @@
 import { createClient } from '@/utils/supabase/server'
-import { Shield, Trash2, UserPlus, AlertTriangle, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
-import { deleteUser, toggleApproval } from './actions'
-import RoleEditor from './role-editor' // Import the new component
+import { Shield, Trash2, UserPlus, Save, AlertTriangle, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { deleteUser, toggleApproval, updateUserRole } from './actions'
+import RoleEditor from './role-editor'
+import { redirect } from 'next/navigation'
 
 export default async function UserManagementPage({
   searchParams,
@@ -10,9 +11,45 @@ export default async function UserManagementPage({
 }) {
   const { error } = await searchParams
   const supabase = await createClient()
+  
   let profiles: any[] = []
   let fetchError = null
+  let currentUserRole = 'user'
 
+  // 1. Get Current User (Safe Check)
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    redirect('/login')
+  }
+
+  // 2. Fetch Current User's Role (Safe Check)
+  try {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+    
+    // If no profile found, default to 'user'
+    currentUserRole = profile?.role || 'user'
+  } catch (err) {
+    console.error("Error fetching current user profile", err)
+  }
+
+  // 3. Security Block
+  if (currentUserRole !== 'admin') {
+    return (
+      <div className="p-8 text-center text-red-600">
+        <Shield size={48} className="mx-auto mb-4" />
+        <h1 className="text-2xl font-bold">Access Denied</h1>
+        <p>Only Admins can manage users.</p>
+        <p className="text-xs text-gray-500 mt-2">Current Role: {currentUserRole}</p>
+      </div>
+    )
+  }
+
+  // 4. Fetch All Profiles (Safe Check)
   try {
     const { data, error: dbError } = await supabase
         .from('profiles')
@@ -23,19 +60,7 @@ export default async function UserManagementPage({
     profiles = data || []
   } catch (err: any) {
     fetchError = err.message
-  }
-
-  const { data: { user } } = await supabase.auth.getUser()
-  const currentUserRole = profiles.find(p => p.id === user?.id)?.role || 'user'
-
-  if (currentUserRole !== 'admin') {
-    return (
-      <div className="p-8 text-center text-red-600">
-        <Shield size={48} className="mx-auto mb-4" />
-        <h1 className="text-2xl font-bold">Access Denied</h1>
-        <p>Only Admins can manage users.</p>
-      </div>
-    )
+    profiles = [] // Ensure it's an array so .map doesn't crash
   }
 
   return (
@@ -112,7 +137,7 @@ export default async function UserManagementPage({
                 <tr key={profile.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="font-bold text-gray-900">{profile.email}</div>
-                    <div className="text-xs text-gray-400">Joined: {new Date(profile.created_at).toLocaleDateString()}</div>
+                    <div className="text-xs text-gray-400">ID: {profile.id.slice(0,8)}...</div>
                   </td>
                   
                   {/* APPROVAL STATUS */}
@@ -130,13 +155,13 @@ export default async function UserManagementPage({
                   
                   {/* DYNAMIC ROLE EDITOR */}
                   <td className="px-4 py-3">
-                    <RoleEditor userId={profile.id} initialRole={profile.role} />
+                    <RoleEditor userId={profile.id} initialRole={profile.role || 'user'} />
                   </td>
 
                   {/* ACTIONS */}
                   <td className="px-4 py-3 text-center flex items-center justify-center gap-2">
-                    {/* Approval Toggle */}
-                    {profile.id !== user?.id && (
+                    {/* Approval Toggle (Only if not self) */}
+                    {profile.id !== user.id && (
                         <form action={toggleApproval}>
                           <input type="hidden" name="id" value={profile.id} />
                           <input type="hidden" name="current_status" value={String(profile.is_approved)} />
@@ -149,8 +174,8 @@ export default async function UserManagementPage({
                         </form>
                     )}
 
-                    {/* Delete */}
-                    {profile.id !== user?.id && (
+                    {/* Delete (Only if not self) */}
+                    {profile.id !== user.id && (
                       <form action={deleteUser} onSubmit={(e) => { if(!confirm('Delete this user?')) e.preventDefault() }}>
                         <input type="hidden" name="id" value={profile.id} />
                         <button className="text-gray-300 hover:text-red-600 p-1 rounded hover:bg-red-50" title="Delete"><Trash2 size={16} /></button>
