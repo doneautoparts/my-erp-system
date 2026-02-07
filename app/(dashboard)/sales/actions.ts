@@ -4,11 +4,12 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
-// --- PERMISSION CHECKER ---
+// --- SECURITY GUARD ---
 async function checkPermissions() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
+    // Get Role
     const { data: profile } = await supabase
         .from('profiles')
         .select('role')
@@ -17,8 +18,9 @@ async function checkPermissions() {
     
     const role = profile?.role || 'user'
     
+    // If NOT Admin AND NOT Manager -> Block Access
     if (role !== 'admin' && role !== 'manager') {
-        throw new Error("Unauthorized: View Only Access. Contact Manager.")
+        throw new Error("Unauthorized: View Only Access. Ask a Manager.")
     }
     return { supabase, user }
 }
@@ -29,7 +31,7 @@ export async function createSale(formData: FormData) {
   let newId = null
 
   try {
-    const { supabase, user } = await checkPermissions()
+    const { supabase, user } = await checkPermissions() // <--- SECURITY CHECK
 
     const companyId = formData.get('company_id') as string
     const customerId = formData.get('customer_id') as string
@@ -80,7 +82,7 @@ export async function addItemToSale(formData: FormData) {
   let errorMsg = null
 
   try {
-    const { supabase } = await checkPermissions()
+    const { supabase } = await checkPermissions() // <--- SECURITY CHECK
 
     const variantId = formData.get('variant_id') as string
     const quantity = parseInt(formData.get('quantity') as string)
@@ -116,7 +118,7 @@ export async function removeItemFromSale(formData: FormData) {
   let errorMsg = null
 
   try {
-    const { supabase } = await checkPermissions()
+    const { supabase } = await checkPermissions() // <--- SECURITY CHECK
     const itemId = formData.get('item_id') as string
 
     const { error } = await supabase.from('sale_items').delete().eq('id', itemId)
@@ -138,7 +140,7 @@ export async function completeSale(formData: FormData) {
   let errorMsg = null
 
   try {
-    const { supabase } = await checkPermissions()
+    const { supabase } = await checkPermissions() // <--- SECURITY CHECK
 
     const { error } = await supabase.from('sales').update({ status: 'Completed' }).eq('id', saleId)
     if (error) throw new Error(error.message)
