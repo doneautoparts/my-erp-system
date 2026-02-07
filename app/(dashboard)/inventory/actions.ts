@@ -9,7 +9,6 @@ async function checkPermissions() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
-    // Fetch Profile Role
     const { data: profile } = await supabase
         .from('profiles')
         .select('role')
@@ -18,20 +17,18 @@ async function checkPermissions() {
     
     const role = profile?.role || 'user'
     
-    // BLOCK if role is just 'user'
     if (role !== 'admin' && role !== 'manager') {
         throw new Error("Unauthorized: View Only Access. Contact Manager.")
     }
-    return supabase // Return client if allowed
+    return supabase
 }
 
 // --- 1. CREATE NEW ITEM ---
 export async function createItem(formData: FormData) {
   let errorMsg = null
   try {
-      const supabase = await checkPermissions() // <--- SECURITY CHECK
+      const supabase = await checkPermissions()
       
-      // ... (Existing Logic extraction) ...
       const brandName = formData.get('brand') as string
       const productName = formData.get('product_name') as string
       const category = formData.get('category') as string
@@ -56,18 +53,25 @@ export async function createItem(formData: FormData) {
       let variantName = [position, type].filter(Boolean).join(' - ')
       if (!variantName) variantName = 'Standard'
 
-      // Database Operations
+      // Handle Brand
       const { data: existingBrand } = await supabase.from('brands').select('id').ilike('name', brandName.trim()).single()
       let brandId = existingBrand?.id
+
       if (!brandId) {
-        const { data: newBrand } = await supabase.from('brands').insert({ name: brandName.trim() }).select('id').single()
+        const { data: newBrand, error: brandError } = await supabase.from('brands').insert({ name: brandName.trim() }).select('id').single()
+        if (brandError) throw new Error(`Brand Error: ${brandError.message}`)
+        if (!newBrand) throw new Error("Failed to create brand") // FIX: Null check
         brandId = newBrand.id
       }
 
+      // Handle Product
       const { data: existingProduct } = await supabase.from('products').select('id').eq('brand_id', brandId).ilike('name', productName.trim()).single()
       let productId = existingProduct?.id
+
       if (!productId) {
-        const { data: newProduct } = await supabase.from('products').insert({ brand_id: brandId, name: productName.trim(), category: category }).select('id').single()
+        const { data: newProduct, error: productError } = await supabase.from('products').insert({ brand_id: brandId, name: productName.trim(), category: category }).select('id').single()
+        if (productError) throw new Error(`Product Error: ${productError.message}`)
+        if (!newProduct) throw new Error("Failed to create product") // FIX: Null check
         productId = newProduct.id
       }
 
@@ -93,7 +97,7 @@ export async function updateItem(formData: FormData) {
   const id = formData.get('id') as string
 
   try {
-      const supabase = await checkPermissions() // <--- SECURITY CHECK
+      const supabase = await checkPermissions()
       
       const oldProductId = formData.get('product_id') as string
       const productName = (formData.get('product_name') as string).trim()
@@ -128,7 +132,9 @@ export async function updateItem(formData: FormData) {
           if (existingTargetProduct) {
               targetProductId = existingTargetProduct.id;
           } else {
-              const { data: newProduct } = await supabase.from('products').insert({ brand_id: currentProduct.brand_id, name: productName, category: category }).select('id').single();
+              const { data: newProduct, error: createError } = await supabase.from('products').insert({ brand_id: currentProduct.brand_id, name: productName, category: category }).select('id').single();
+              if (createError) throw new Error(createError.message);
+              if (!newProduct) throw new Error("Failed to create new product group"); // FIX
               targetProductId = newProduct.id;
           }
       } else {
@@ -155,7 +161,7 @@ export async function updateItem(formData: FormData) {
 // --- 3. QUICK INLINE UPDATE ---
 export async function quickUpdateVariant(formData: FormData) {
   try {
-    const supabase = await checkPermissions() // <--- SECURITY CHECK
+    const supabase = await checkPermissions()
     
     const id = formData.get('id') as string
     const updates = {
@@ -175,14 +181,14 @@ export async function quickUpdateVariant(formData: FormData) {
     revalidatePath('/inventory')
     return { success: true }
   } catch (err: any) {
-    throw new Error(err.message) // Pass error to client
+    throw new Error(err.message)
   }
 }
 
 // --- 4. DELETE ITEM ---
 export async function deleteItem(formData: FormData) {
   try {
-    const supabase = await checkPermissions() // <--- SECURITY CHECK
+    const supabase = await checkPermissions()
     const id = formData.get('id') as string
 
     const { error } = await supabase.from('variants').delete().eq('id', id)
