@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, Box, Download, Truck, Anchor, Save, FolderOpen, Printer, RotateCcw } from 'lucide-react'
+import { Plus, Trash2, Download, Truck, Anchor, Save, FolderOpen, Printer, RotateCcw } from 'lucide-react'
 import { saveScenario, deleteScenario, getScenario } from './actions'
 import { useRouter } from 'next/navigation'
 
@@ -137,6 +137,14 @@ export default function ShipmentSimulator({
         if (newTier === 'sell') newPrice = item.origSell
         else if (newTier === 'online') newPrice = item.origOnline
         else if (newTier === 'proposal') newPrice = item.origProposal
+        
+        // Safety check for DB load
+        if (newPrice === 0) {
+           if (newTier === 'sell') newPrice = item.origSell || 0
+           else if (newTier === 'online') newPrice = item.origOnline || 0
+           else if (newTier === 'proposal') newPrice = item.origProposal || 0
+        }
+
         return { ...item, targetPrice: newPrice, selectedTier: newTier }
     }))
   }
@@ -167,7 +175,7 @@ export default function ShipmentSimulator({
   // --- ENGINE: CALCULATIONS ---
   const calculation = useMemo(() => {
     let totalCBM = 0, totalFOB_RM = 0, totalFOB_USD = 0, totalExactCartons = 0, totalQty = 0
-    let totalProjectedProfit = 0 // NEW: Total Profit Tracker
+    let totalProjectedProfit = 0
 
     const rowsWithVolume = orderItems.map(item => {
       const safeItem = item || {}
@@ -207,30 +215,17 @@ export default function ShipmentSimulator({
       const unitDuty = item.unitFobRM * dutyRate
       const landedCost = item.unitFobRM + allocatedLogistics + unitDuty + allocatedSST + consumable + license
       
-      // Calculate Profit per Unit
       const grossProfit = (item.targetPrice || 0) - landedCost
       const margin = (item.targetPrice || 0) > 0 ? (grossProfit / item.targetPrice) * 100 : 0
       
-      // Calculate Total Profit for this row
-      const rowTotalProfit = grossProfit * item.orderQty
-      totalProjectedProfit += rowTotalProfit
+      totalProjectedProfit += (grossProfit * item.orderQty)
 
       return { ...item, landedCost, grossProfit, margin, isLowMargin: margin < 20 }
     })
 
     return {
       rows: finalRows,
-      totals: { 
-          qty: totalQty, 
-          cbm: totalCBM, 
-          cartons: totalExactCartons, 
-          fobRM: totalFOB_RM, 
-          fobUSD: totalFOB_USD, 
-          logistics: totalLogisticsLumpSum, 
-          sst: totalSST, 
-          cashOutlay: totalFOB_RM + totalLogisticsLumpSum + totalSST + (totalFOB_RM * dutyRate),
-          projectedProfit: totalProjectedProfit // NEW
-      }
+      totals: { qty: totalQty, cbm: totalCBM, cartons: totalExactCartons, fobRM: totalFOB_RM, fobUSD: totalFOB_USD, logistics: totalLogisticsLumpSum, sst: totalSST, cashOutlay: totalFOB_RM + totalLogisticsLumpSum + totalSST + (totalFOB_RM * dutyRate), projectedProfit: totalProjectedProfit }
     }
   }, [orderItems, exchangeRate, oceanLumpSum, truckingLumpSum, isFormE, manualDutyPct, consumable, license])
 
@@ -307,65 +302,38 @@ export default function ShipmentSimulator({
             </div>
         </div>
 
-        {/* KPI HEADER (Added Profit Column) */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden print:border-2 print:border-black mb-6">
-          <table className="min-w-full text-sm">
-             <thead className="bg-gray-100 text-gray-700 uppercase font-bold text-xs border-b border-gray-300 print:bg-gray-200 print:text-black">
+        {/* --- EXCEL STYLE SUMMARY TABLE (UPDATED) --- */}
+        <div className="bg-white overflow-hidden mb-6 border border-gray-300 print:border-2 print:border-black">
+          <table className="min-w-full text-sm border-collapse">
+             <thead className="bg-gray-300 text-black uppercase font-bold text-xs text-center">
                 <tr>
-                   <th className="px-2 py-2 border-r text-center w-[10%]">Rate / Duty</th>
-                   <th className="px-2 py-2 border-r text-center w-[10%]">Qty</th>
-                   <th className="px-2 py-2 border-r text-center w-[12%]">Volume</th>
-                   <th className="px-2 py-2 border-r text-right w-[20%]">FOB Value</th>
-                   <th className="px-2 py-2 border-r text-right w-[24%]">Total Costing</th>
-                   <th className="px-2 py-2 text-right bg-green-50 text-green-900 w-[24%] print:bg-white print:text-black">Projected Profit</th>
+                   <th className="p-2 border border-gray-400">Rate / Duty</th>
+                   <th className="p-2 border border-gray-400">Qty</th>
+                   <th className="p-2 border border-gray-400">Volume</th>
+                   <th className="p-2 border border-gray-400">FOB Value</th>
+                   <th className="p-2 border border-gray-400">SST Tax</th>
+                   <th className="p-2 border border-gray-400">Total Costing</th>
+                   <th className="p-2 border border-gray-400 bg-green-100 print:bg-gray-300">Projected Profit</th>
                 </tr>
              </thead>
-             <tbody className="text-gray-800">
-                <tr className="border-b border-gray-100 print:border-gray-300">
-                   <td className="px-2 py-2 border-r text-center font-mono">
-                      <div className="font-bold">USD {exchangeRate.toFixed(2)}</div>
-                   </td>
-                   <td className="px-2 py-2 border-r text-center font-bold text-lg">
-                      {formatQty(calculation.totals.qty)}
-                   </td>
-                   <td className="px-2 py-2 border-r text-center">
-                      <div className="font-bold text-lg text-indigo-700 print:text-black">{calculation.totals.cbm.toFixed(2)} m³</div>
-                   </td>
-                   <td className="px-2 py-2 border-r text-right">
-                      <div className="font-bold text-blue-700 print:text-black">{formatUSD(calculation.totals.fobUSD)}</div>
-                   </td>
-                   <td className="px-2 py-2 text-right font-bold text-orange-600 border-r print:text-black">
-                      LOGS: {formatRM(calculation.totals.logistics)}
-                   </td>
-                   {/* TOTAL PROFIT CELL */}
-                   <td className="px-2 py-2 text-right font-bold text-xl text-green-700 bg-green-50 print:bg-white print:text-black">
-                      {formatRM(calculation.totals.projectedProfit)}
-                   </td>
+             <tbody className="text-gray-900 text-center">
+                <tr className="bg-gray-50">
+                   <td className="p-2 border border-gray-400 font-mono font-bold">USD {exchangeRate.toFixed(2)}</td>
+                   <td className="p-2 border border-gray-400 font-bold text-lg">{formatQty(calculation.totals.qty)}</td>
+                   <td className="p-2 border border-gray-400 font-bold text-indigo-700 print:text-black">{calculation.totals.cbm.toFixed(2)} m³</td>
+                   <td className="p-2 border border-gray-400 font-bold text-blue-700 print:text-black">{formatUSD(calculation.totals.fobUSD)}</td>
+                   <td className="p-2 border border-gray-400 font-bold text-red-600 print:text-black">{formatRM(calculation.totals.sst)}</td>
+                   <td className="p-2 border border-gray-400 font-bold text-orange-700 print:text-black">LOGS: {formatRM(calculation.totals.logistics)}</td>
+                   <td className="p-2 border border-gray-400 font-bold text-xl text-green-700 print:text-black">{formatRM(calculation.totals.projectedProfit)}</td>
                 </tr>
-                <tr>
-                   <td className="px-2 py-2 border-r text-center text-xs text-gray-500">
-                      {isFormE ? '0% (Form E)' : `${manualDutyPct}% Duty`}
-                   </td>
-                   <td className="px-2 py-2 border-r text-center text-xs text-gray-500">Units</td>
-                   <td className="px-2 py-2 border-r text-center text-xs text-gray-500">
-                      {(calculation.totals.cartons || 0).toFixed(1)} Ctns
-                   </td>
-                   <td className="px-2 py-2 border-r text-right font-semibold text-gray-700">
-                      {formatRM(calculation.totals.fobRM)}
-                   </td>
-                   <td className="px-2 py-2 text-right border-r">
-                      <div className="flex justify-between items-center text-xs mb-1">
-                          <span className="text-gray-500">SST: {formatRM(calculation.totals.sst)}</span>
-                          <span className="font-bold text-xl text-black bg-yellow-100 px-2 rounded print:bg-transparent">
-                             {formatRM(calculation.totals.cashOutlay)}
-                          </span>
-                      </div>
-                   </td>
-                   <td className="px-2 py-2 text-right bg-green-50 print:bg-white">
-                      <div className="text-xs text-green-800 italic print:text-black">
-                         (If sold at Target Price)
-                      </div>
-                   </td>
+                <tr className="bg-gray-100">
+                   <td className="p-2 border border-gray-400 text-xs text-gray-600">{isFormE ? '0% (Form E)' : `${manualDutyPct}% Duty`}</td>
+                   <td className="p-2 border border-gray-400 text-xs text-gray-600">Units</td>
+                   <td className="p-2 border border-gray-400 text-xs text-gray-600">{calculation.totals.cartons.toFixed(1)} Ctns</td>
+                   <td className="p-2 border border-gray-400 text-sm font-semibold">{formatRM(calculation.totals.fobRM)}</td>
+                   <td className="p-2 border border-gray-400 text-xs text-gray-600">SST (10%)</td>
+                   <td className="p-2 border border-gray-400 font-bold text-lg">{formatRM(calculation.totals.cashOutlay)}</td>
+                   <td className="p-2 border border-gray-400 text-xs text-gray-600 italic">(If sold at Target Price)</td>
                 </tr>
              </tbody>
           </table>
@@ -410,7 +378,7 @@ export default function ShipmentSimulator({
           <div className="flex justify-between items-center p-3 border-b bg-gray-50 print:bg-white print:border-black">
             <h3 className="font-bold text-gray-700">Shipment Manifest</h3>
             <div className="flex gap-2 items-center print-hidden bg-gray-100 p-1 rounded-md">
-                <span className="text-xs font-bold text-gray-500 px-2">Global Price:</span>
+                <span className="text-xs font-bold text-gray-500 px-2">Set Price:</span>
                 <button onClick={() => handleGlobalTierChange('sell')} className={`px-2 py-1 text-xs rounded ${globalTier === 'sell' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>SELL</button>
                 <button onClick={() => handleGlobalTierChange('online')} className={`px-2 py-1 text-xs rounded ${globalTier === 'online' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>ONLINE</button>
                 <button onClick={() => handleGlobalTierChange('proposal')} className={`px-2 py-1 text-xs rounded ${globalTier === 'proposal' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-800'}`}>PROP</button>
@@ -454,10 +422,18 @@ export default function ShipmentSimulator({
                     <td className="px-2 py-2 text-right font-mono text-gray-600">{(row.unitFobUSD || 0) > 0 ? (row.unitFobUSD || 0).toFixed(2) : '-'}</td>
                     <td className="px-2 py-2 text-right font-mono text-gray-600">{(row.unitFobRM || 0).toFixed(2)}</td>
                     <td className="px-2 py-2 text-right font-bold text-blue-700 bg-blue-50 print:bg-white print:text-black">{(row.landedCost || 0).toFixed(2)}</td>
+                    
                     <td className="px-2 py-2 bg-green-50 print:bg-white">
-                       <input type="number" value={row.targetPrice} onChange={(e) => updateOrderRow(row.uniqueId, 'targetPrice', parseFloat(e.target.value))} className="w-full text-right border rounded p-1 bg-white print-hidden font-bold" step="0.01" />
-                       <span className="hidden print:block text-right font-bold">{(row.targetPrice || 0).toFixed(2)}</span>
+                       <input 
+                        type="number" 
+                        value={row.targetPrice} 
+                        onChange={(e) => updateOrderRow(row.uniqueId, 'targetPrice', parseFloat(e.target.value))}
+                        className="w-full text-right border rounded p-1 bg-white print-hidden font-bold"
+                        step="0.01"
+                      />
+                      <span className="hidden print:block text-right font-bold">{(row.targetPrice || 0).toFixed(2)}</span>
                     </td>
+
                     <td className={`px-2 py-2 text-right font-bold bg-green-50 print:bg-white ${(row.grossProfit || 0) > 0 ? 'text-green-700' : 'text-red-700'}`}>{(row.grossProfit || 0).toFixed(2)}</td>
                     <td className="px-2 py-2 text-right font-bold bg-green-50 print:bg-white">{(row.margin || 0).toFixed(1)}%</td>
                     <td className="px-2 py-2 text-center print-hidden"><button onClick={() => handleRemove(row.uniqueId)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button></td>
